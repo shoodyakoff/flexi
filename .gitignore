@@ -1,0 +1,56 @@
+# ── OS / editor ─────────────────────────────────────────────────────────
+.DS_Store
+
+# ── Secrets ─────────────────────────────────────────────────────────────
+.env
+
+# ── Python ──────────────────────────────────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# ── Local agent / tool state (but DO ship the bundled skill) ────────────
+.claude/*
+!.claude/skills/
+.codex/
+.superpowers/
+.trae/
+
+# ── Generated renders, caches, local DBs ────────────────────────────────
+output/
+raw/
+data/*.sqlite
+data/*.sqlite-*
+
+# ── Media: never commit binary video/audio (root, raw/, assets/, anywhere) ─
+# This is the safety net — the engine assets we DO ship (fonts, _meta.json,
+# pronunciation.yaml) are text/config, so they pass through untouched.
+*.mp4
+*.MOV
+*.mov
+*.m4v
+*.mp3
+*.wav
+*.aac
+*.m4a
+
+# ── Asset media folders: keep the folder skeleton (.gitkeep) but ignore
+#    any clips/sidecars dropped into them. Tracked engine assets live in
+#    assets/fonts/, assets/pronunciation.yaml, assets/hook_overlays/_meta.json
+assets/broll/*
+assets/broll_brand/*
+assets/broll_ingest/*
+assets/ctas/*
+assets/hooks/*
+assets/music/*
+assets/sounds/*
+assets/talking_head_sources/*
+assets/hook_overlays/*
+*.transcript.json
+*.transcript.json.hash
+!assets/**/.gitkeep
+!assets/hook_overlays/_meta.json
+!assets/**/_meta.json

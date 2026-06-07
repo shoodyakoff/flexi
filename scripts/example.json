@@ -1,0 +1,9 @@
+{
+  "slug": "example-reel",
+  "hook_id": "hook_example",
+  "cta_id": "cta_example",
+  "voiceover_text": "Хочешь успевать больше за день? Вот три простых правила. Первое — одно дело за раз, без переключений между вкладками. Второе — таймер на двадцать пять минут, потом короткий отдых. Третье — убери телефон в другую комнату. Попробуй сегодня.",
+  "broll_strategy": "auto",
+  "broll_tags_preferred": [],
+  "subtitle_style": "editorial_pop"
+}

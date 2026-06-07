@@ -1,0 +1,19 @@
+# ── Core (all pipelines) ────────────────────────────────────────────────
+elevenlabs>=1.0.0
+faster-whisper>=1.0.0
+stable-ts>=2.19.0
+pydantic>=2.0
+typer>=0.12
+rich>=13.0
+ffmpeg-python>=0.2.0
+python-dotenv>=1.0
+pyyaml>=6.0
+
+# ── 3-strip QA layer (pipelines/three_strip/qa.py) ──────────────────────
+Pillow>=10.0
+imagehash>=4.3
+numpy>=1.24
+opencv-python-headless>=4.8
+
+# ── Tests ───────────────────────────────────────────────────────────────
+pytest>=8.0
