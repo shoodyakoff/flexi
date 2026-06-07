@@ -1,7 +1,13 @@
 PYTHON ?= .venv/bin/python
 SCRIPT ?= scripts/example.json
 
-.PHONY: test validate build
+.PHONY: check test validate build
+
+# Readiness check (Russian, beginner-friendly). Runs on a bare clone with system
+# python3 — no venv needed. Reports what's installed, what media is present, and
+# what can be built. See also: НАЧНИ_ЗДЕСЬ.md
+check:
+	python3 check_setup.py
 
 # Run the test suite (integration tests needing local media auto-skip).
 test:

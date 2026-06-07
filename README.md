@@ -9,6 +9,11 @@ Claude Code, which self-onboards from `CLAUDE.md`).
 > Flexi is the reusable engine. It ships with **no media** — bring your own
 > footage, music, and SFX. Fonts are bundled under open licenses.
 
+**🇷🇺 Не разработчик / по-русски?** Открой **[НАЧНИ_ЗДЕСЬ.md](НАЧНИ_ЗДЕСЬ.md)** —
+пошаговый онбординг простыми словами. Можно вообще ничего не настраивать руками:
+попроси агента «установи всё, что нужно» — он сам поставит и скажет, когда
+готово. Проверка готовности: `make check` (или `python3 check_setup.py`).
+
 ## Pipelines
 
 | Pipeline | What it does |
@@ -37,6 +42,7 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env          # then add your ELEVENLABS_API_KEY
 .venv/bin/python -m pytest    # integration tests needing media auto-skip
+python3 check_setup.py        # readiness check (RU): deps, media, what you can build
 ```
 
 ## Usage
@@ -88,8 +94,10 @@ pipelines/   every pipeline entry point (incl. three_strip/)
 docs/        modes.md + agentic-mode guides
 tests/       pytest suite (integration tests auto-skip without media)
 assets/      bundled fonts + your media (you supply)
+raw/         your drop inbox — agent sorts it into assets/ + scripts/
 scripts/     VideoScript JSON inputs (example.json)
 config.yaml  all render/TTS/subtitle/audio knobs
+check_setup.py · НАЧНИ_ЗДЕСЬ.md  readiness check + RU onboarding (human)
 ```
 
 ## License

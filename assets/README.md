@@ -6,6 +6,11 @@ open license, the pronunciation map, and the overlay keyword map). The media
 folders below ship as empty skeletons (`.gitkeep`) so you know where to drop
 files; anything you add is git-ignored automatically.
 
+**Easiest path: drop everything into `raw/`** (the inbox at the repo root) and
+tell the agent what to make — it sorts each file into the folders below and
+re-indexes. See `CLAUDE.md` → "The `raw/` inbox". Or place files directly if you
+already know where they go.
+
 | folder | what goes here | tracked? |
 |---|---|---|
 | `fonts/` | subtitle/heading fonts (open-licensed set bundled — see `fonts/README.md`) | ✅ yes |

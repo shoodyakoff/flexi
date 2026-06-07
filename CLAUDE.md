@@ -12,6 +12,12 @@ docs for the pipeline you'll use.
 
 ## First-run setup (do this once, on a fresh clone)
 
+> Run `python3 check_setup.py` (or `make check`) at any point — it diagnoses
+> every item below in plain Russian and prints the exact fix command. For a
+> non-developer user, perform the setup yourself and just report when it's ready
+> (see "Onboard in Russian" under Operating rules). Human onboarding:
+> `НАЧНИ_ЗДЕСЬ.md`.
+
 1. **System deps** — `ffmpeg` (with libass), `python3` ≥ 3.10. The 3-strip and
    talking-head pipelines also use `ffprobe` (ships with ffmpeg).
 2. **Python env**:
@@ -61,16 +67,58 @@ build on. `python -m src.cli --help` lists all CLI subcommands.
 CLAUDE.md            ← you are here (agent onboarding, read on launch)
 AGENTS.md            ← operating rules
 README.md            ← human quickstart
+НАЧНИ_ЗДЕСЬ.md       ← русский онбординг для новичка (read first if the user is RU)
+check_setup.py       ← readiness check (deps/env/media) — `python3 check_setup.py`
 config.yaml          ← all render/TTS/subtitle/audio knobs (one source of truth)
 src/                 ← shared engine library + `src.cli`
 pipelines/           ← every pipeline entry point (one place)
   three_strip/       ← 3-strip engine + RULES.md + episodes/example.conf
 docs/                ← modes.md (mode reference), agentic-mode.md + usage guide
 tests/               ← pytest suite (integration tests auto-skip without media)
+raw/                 ← your drop inbox; the agent sorts it into assets/ + scripts/ (git-ignored)
 assets/              ← fonts (bundled) + your media (you supply) — see assets/README.md
 scripts/             ← VideoScript JSON inputs (example.json shows the format)
 .claude/skills/video-montage/  ← deep ffmpeg/TTS/subtitle how-to (a skill)
 ```
+
+---
+
+## The `raw/` inbox (how you feed the pipelines)
+
+`raw/` (repo root) is the user's drop folder. The user dumps whatever a task
+needs — footage, music, SFX, a ready hook/CTA clip, overlay icons, even a
+`VideoScript` JSON — into `raw/` (flat, no sorting) and then describes what to
+make. **Sorting it is your job.**
+
+At the **start of any task that needs media**, before building:
+
+1. **Inventory** `raw/` — list it and `ffprobe` each clip (duration, resolution,
+   orientation, audio track). Filename hints help but aren't authoritative;
+   remember iPhone rotation tags lie — confirm orientation by eye when it matters.
+2. **Classify & plan** — map each file to its destination (table below) and show
+   the user the plan. If a file is ambiguous (could be a hook *or* b-roll) or two
+   files both fit one slot, **ask before moving** — don't guess.
+3. **File it** — **move** (not copy) each file into its folder, renaming to that
+   folder's convention (e.g. `broll_012.mp4`, `hook_003.mp4`). `raw/` should end
+   empty except files you flagged as unclassifiable.
+4. **Re-index** so the engine sees the new media (last column).
+
+| What's in `raw/` | Move to | Then |
+|---|---|---|
+| Talking-head footage (person to camera) | `assets/talking_head_sources/` | pass its path to the talking-head / ref-style pipeline |
+| General b-roll (scenes, atmosphere) | `assets/broll/` | `python -m src.cli scan-broll` (builds the normalized ingest cache + indexes); descriptions via `annotate-broll` or by editing `broll/_meta.json` |
+| Product / screen-demo clips | `assets/broll_brand/` | referenced as the product insert (script / `config.yaml`) |
+| Ready hook clip (opener) | `assets/hooks/` | add an entry to `assets/hooks/_meta.json` (or `scan-assets hooks` when a human drives the prompts) |
+| Ready CTA clip (ending) | `assets/ctas/` | add an entry to `assets/ctas/_meta.json` (or `scan-assets ctas`) |
+| Music track | `assets/music/` | point `config.yaml → edit_profile.music_file` at it |
+| SFX (riser, swoosh…) | `assets/sounds/` | referenced by name in `config.yaml` |
+| Overlay icon (PNG glyph) | `assets/hook_overlays/` | add its keyword(s) to `assets/hook_overlays/_meta.json` |
+| `VideoScript` JSON | `scripts/` | build with `python -m src.cli build scripts/<slug>.json` |
+
+`scan-broll` is non-interactive (safe to run); `scan-assets` / `annotate-broll`
+prompt interactively, so when running unattended, write the `_meta.json` entry
+yourself instead. `raw/` is git-ignored (only its `README.md` is tracked) — it's
+local input, never source of truth.
 
 ---
 
@@ -81,6 +129,17 @@ scripts/             ← VideoScript JSON inputs (example.json shows the format)
   `{{pause:...}}` / `{{slow}}…{{/slow}}` markup.
 - Treat `output/`, `raw/`, `assets/` media, `.venv/`, and caches as local
   runtime artifacts — never source of truth.
+- **`raw/` is the inbox.** At the start of a media task, sort it: classify each
+  dropped file, show the plan, **move** it into the right `assets/` folder or
+  `scripts/` (ask when ambiguous), then re-index. See "The `raw/` inbox" above.
+- **Onboard in Russian, and do the setup yourself.** The user is a Russian-
+  speaking non-developer — never make them run terminal commands. Offer to install
+  everything ("да, могу всё поставить сам — напишу, когда будет готово"), then do
+  it: create `.venv` with a wheel-stable Python (3.12/3.13 — the newest Python may
+  lack prebuilt ML wheels), `pip install -r requirements.txt`, and `brew install`
+  any missing system dep (ffmpeg) after asking. Run `python3 check_setup.py`
+  before/after and report readiness **simply, in Russian**. Point them to
+  `НАЧНИ_ЗДЕСЬ.md`.
 - `config.yaml` is the single source of render/TTS/subtitle defaults. Change
   behavior there, not by hardcoding.
 - **iPhone rotation tags lie** — for the 3-strip / talking-head routes, verify

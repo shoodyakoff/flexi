@@ -21,7 +21,8 @@ __pycache__/
 
 # ── Generated renders, caches, local DBs ────────────────────────────────
 output/
-raw/
+raw/*
+!raw/README.md
 data/*.sqlite
 data/*.sqlite-*
 
