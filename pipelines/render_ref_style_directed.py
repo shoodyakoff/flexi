@@ -587,6 +587,12 @@ def chunk_words(words: list[dict], plan: RefStyleEditPlan) -> list[list[dict]]:
             "format_5_lower_demo_cta": 2,
         }.get(format_id, 2)
 
+    def segment_index_for(t: float) -> int:
+        for i, segment in enumerate(plan.segments):
+            if segment.start <= t < segment.end:
+                return i
+        return -1
+
     for word in words:
         format_id = format_for_time(plan, word["start"])
         if not current:
@@ -595,8 +601,12 @@ def chunk_words(words: list[dict], plan: RefStyleEditPlan) -> list[list[dict]]:
         previous = current[-1]
         current_format = format_for_time(plan, current[0]["start"])
         same_format = format_id == current_format
+        # Never let one caption span two beats: a beat boundary always ends the
+        # caption. (Keeps e.g. "...ATS" on the analysis beat and starts "потом ..."
+        # fresh on the next beat instead of gluing them across the pause.)
+        same_segment = segment_index_for(word["start"]) == segment_index_for(current[0]["start"])
         gap = word["start"] - previous["end"]
-        if not same_format or gap > 0.38 or len(current) >= max_words_for(current_format):
+        if not same_format or not same_segment or gap > 0.38 or len(current) >= max_words_for(current_format):
             chunks.append(current)
             current = [word]
         else:
@@ -654,7 +664,7 @@ Style: Badge,Bebas Neue Cyrillic,80,&H00FFFFFF,&H000000FF,&H00652D8B,&H00652D8B,
 Style: RetroDark,Ruslan Display,138,&H00EDE0A5,&H000000FF,&H00353C31,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,20,20,20,1
 Style: RetroCream,Ruslan Display,132,&H006D3F85,&H000000FF,&H00EEE2A5,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,20,20,20,1
 Style: PosterWhite,Bebas Neue Cyrillic,104,&H00FFFFFF,&H000000FF,&H00202A3A,&H70000000,-1,0,0,0,100,100,0,0,1,5,2,5,20,20,20,1
-Style: EditorialWhite,Onest,92,&H00FFFFFF,&H000000FF,&H00000000,&H70000000,-1,0,0,0,100,100,0,0,1,2,3,5,20,20,20,1
+Style: EditorialWhite,Onest,92,&H00FFFFFF,&H000000FF,&H00000000,&H70000000,-1,0,0,0,100,100,0,0,1,4,2,5,20,20,20,1
 Style: EditorialYellow,Bebas Neue Cyrillic,128,&H0000F5FF,&H000000FF,&H00000000,&H50000000,-1,0,0,0,100,100,0,0,1,4,4,5,20,20,20,1
 Style: PlainWhite,Onest,86,&H00FFFFFF,&H000000FF,&H30505050,&H90000000,-1,0,0,0,100,100,0,0,1,2,2,5,20,20,20,1
 Style: Marker,Arial,40,&H002028E0,&H000000FF,&H002028E0,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,20,20,20,1
@@ -989,6 +999,7 @@ def render_base(
     cut_times: list[float] | None = None,
     product_tags: list[list[str]] | None = None,
     forced_products: dict[float, str] | None = None,
+    head_cutaways: bool = True,
 ) -> None:
     products = list(product) if isinstance(product, list) else [product]
     if not products:
@@ -1012,7 +1023,7 @@ def render_base(
     # Talking-head cutaways inside long demo beats: drop the blue cover + product
     # card during these windows so the live head shows. Kept few and calm (clean
     # cuts, no whip-smear) so the demo↔head transitions don't feel too dynamic.
-    cutaways = demo_head_cutaways(plan)
+    cutaways = demo_head_cutaways(plan) if head_cutaways else []
     cutaway_expr = "+".join(
         f"between(t,{start:.2f},{end:.2f})" for start, end in cutaways
     ) or "0"
@@ -1313,6 +1324,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sfx", type=Path, default=ROOT / "assets/sounds/swoosh.mp3")
     parser.add_argument("--fonts-dir", type=Path, default=ROOT / "assets/fonts")
     parser.add_argument("--clean-dir", type=Path, default=None)
+    parser.add_argument(
+        "--no-head-cutaways",
+        action="store_true",
+        help="Disable the short talking-head cutaways punched into long blue-demo "
+        "beats, so each product screen holds steady (no flicker to the live head).",
+    )
     parser.add_argument("--skip-clean-prelayer", action="store_true")
     parser.add_argument("--force-clean-prelayer", action="store_true")
     parser.add_argument("--tighten-pauses", action="store_true")
@@ -1458,6 +1475,39 @@ def main() -> None:
             segs = rebuilt
         plan = plan.model_copy(update={"segments": segs})
 
+        # Merge consecutive segments that share a format AND (for product beats)
+        # the same forced clip into one. Otherwise a single overridden range that
+        # spans several inherited sub-beats becomes several segments all forcing
+        # the same clip -- and the renderer restarts that clip at start=0 on each,
+        # which reads as the product frame jumping back mid-beat. Merging makes the
+        # clip play once across the whole beat (and drops the in-beat whip/flash).
+        merged: list[RefStyleEditSegment] = []
+        for seg in plan.segments:
+            if merged:
+                prev = merged[-1]
+                same_fmt = prev.format_id == seg.format_id
+                contiguous = abs(seg.start - prev.end) < 0.6
+                same_clip = forced_products.get(round(prev.start, 2)) == \
+                    forced_products.get(round(seg.start, 2))
+                if same_fmt and contiguous and same_clip:
+                    merged[-1] = prev.model_copy(update={"end": seg.end})
+                    continue
+            merged.append(seg)
+        plan = plan.model_copy(update={"segments": merged})
+
+        # Close micro-gaps (silent pauses) between consecutive beats so the blue
+        # cover + product card stay continuous instead of flashing to the live
+        # head for a frame or two in the pause between two demo screens.
+        closed: list[RefStyleEditSegment] = []
+        segments = list(plan.segments)
+        for i, seg in enumerate(segments):
+            if i + 1 < len(segments):
+                gap = segments[i + 1].start - seg.end
+                if 0 < gap < 0.30:
+                    seg = seg.model_copy(update={"end": round(segments[i + 1].start, 3)})
+            closed.append(seg)
+        plan = plan.model_copy(update={"segments": closed})
+
     duration = directed_duration(transcript, plan)
 
     ass_path = output.with_suffix(".ass")
@@ -1502,6 +1552,7 @@ def main() -> None:
         cut_times=cut_times,
         product_tags=product_tags,
         forced_products=forced_products,
+        head_cutaways=not args.no_head_cutaways,
     )
     # Record which clip landed on which demo line (for QA / review of sync).
     _demo_segments = [
