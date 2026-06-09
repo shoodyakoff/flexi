@@ -49,10 +49,13 @@ two files both fit one slot, ask before moving. Leave only unclassifiable files
 in `raw/`, and tell the user what you left and why.
 
 Before creating or building a reel, choose the production route explicitly (see
-`CLAUDE.md` and `docs/modes.md`): standard/library, talking-head clean,
-ref-style directed, Reel Matrix, or 3-strip. Use the defaults in `config.yaml`
-(TTS speed/model, subtitle style, music, b-roll strategy) without re-asking,
-unless the user requested something different. If media-to-script matching is
+`CLAUDE.md` and `docs/modes.md`). The five routes, with the Russian names the user
+will use: **Broll-рилс с ElevenLabs** (standard/library), **Говорящая голова**
+(talking-head clean), **Демо продукта** (ref-style directed — WIP), **Много
+рилсов** (Reel Matrix — WIP), and **Динамичный рилс** (3-strip). Map the user's
+request to a route by the "User says (RU)" trigger phrases in `CLAUDE.md`. Use the
+defaults in `config.yaml` (TTS speed/model, subtitle style, music, b-roll
+strategy) without re-asking, unless the user requested something different. If media-to-script matching is
 ambiguous or a required asset is missing, ask before rendering.
 
 For the 3-strip and talking-head routes, remember that **iPhone rotation tags

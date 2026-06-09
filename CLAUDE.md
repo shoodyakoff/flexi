@@ -43,14 +43,20 @@ guessing.
 
 Pick **one** route before building. Full reference: `docs/modes.md`.
 
-| # | Pipeline | Use when | Entry point |
-|---|---|---|---|
-| 1 | **Standard / library** | Hook + TTS voiceover + auto/manual b-roll + CTA + subtitles + music, assembled from a `VideoScript` JSON. The base route. | `python -m src.cli build scripts/<slug>.json` |
-| 2 | **Talking-head clean** | You have raw talking-head footage and want a clean dynamic cut (silence/retake removal, HDR→SDR, vertical), optionally subtitled. | `python pipelines/render_talking_head_dynamic_clean.py` |
-| 3 | **Ref-style directed** (`custom_graphics`) | Turn a transcript into a directed montage across **5 visual formats** with product b-roll, burned captions, music. | `python pipelines/render_ref_style_directed.py` |
-| 4 | **Reel Matrix** | Shoot interchangeable hook/tip/cta blocks and mix them into many unique videos (combinatorial, on top of #2+#3). | `python pipelines/reel_matrix.py` |
-| 5 | **3-strip** | Three horizontal clips stacked in one 9:16 frame, asynchronous cascade. Config-driven; great for "a day of footage". | `zsh pipelines/three_strip/build_3strip.zsh episodes/<name>.conf` |
-| — | **QA** | Gate a finished video (format, dead air, HDR wash, captions, loudness). Not a route — a check. | `python pipelines/qa_ref_style.py` (ref-style) · `three_strip/qa.py` (3-strip) |
+The user speaks Russian and refers to routes by the **RU name** below. Map the
+request to a route by the **"User says (RU)"** trigger phrases.
+
+| # | Pipeline — RU name | Use when | User says (RU) | Entry point |
+|---|---|---|---|---|
+| 1 | **Broll-рилс с ElevenLabs** (Standard / library) | Hook + TTS voiceover + auto/manual b-roll + CTA + subtitles + music, assembled from a `VideoScript` JSON. The base route. | «собери Broll-рилс», «сделай рилс из этого текста / сценария», «рилс с озвучкой и вставками» | `python -m src.cli build scripts/<slug>.json` |
+| 2 | **Говорящая голова** (Talking-head clean) | You have raw talking-head footage and want a clean dynamic cut (silence/retake removal, HDR→SDR, vertical), optionally subtitled. | «почисти это видео / интервью», «убери паузы и дубли», «собери говорящую голову», «сделай вертикальным с субтитрами» | `python pipelines/render_talking_head_dynamic_clean.py` |
+| 3 | **Демо продукта** (Ref-style directed, `custom_graphics`) — *WIP* | Turn a transcript into a directed montage across **5 visual formats** with product b-roll, burned captions, music. | «сделай видео с демо продукта», «собери демо» | `python pipelines/render_ref_style_directed.py` |
+| 4 | **Много рилсов** (Reel Matrix) — *WIP* | Shoot interchangeable hook/tip/cta blocks and mix them into many unique videos (combinatorial, on top of #2+#3). | «сделай серию рилсов из файлов», «собери серию рилсов», «нужно много вариантов», «перемешай вступления и концовки» | `python pipelines/reel_matrix.py` |
+| 5 | **Динамичный рилс** (3-strip) | Three horizontal clips stacked in one 9:16 frame, asynchronous cascade. Config-driven; great for "a day of footage". | «собери динамичный рилс», «три клипа в одном кадре из сегодняшних видео» | `zsh pipelines/three_strip/build_3strip.zsh episodes/<name>.conf` |
+| — | **QA** | Gate a finished video (format, dead air, HDR wash, captions, loudness). Not a route — a check. | — | `python pipelines/qa_ref_style.py` (ref-style) · `three_strip/qa.py` (3-strip) |
+
+Routes **#3 (Демо продукта)** and **#4 (Много рилсов)** are *work-in-progress* —
+usable but not yet stable; tell the user so if they pick one.
 
 The **5 ref-style formats**: `hook_metal` → `framed_face` → `turn_badge` →
 `blue_demo` → `lower_demo_cta` (semantic order, not a fixed rotation).

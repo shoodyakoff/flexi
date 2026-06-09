@@ -5,13 +5,13 @@
 каждый из корня репозитория, чтобы `src.*` и `pipelines.*` корректно
 разрешались.
 
-| Пайплайн | Файл | Кратко |
+| Режим (рус) | Файл | Кратко |
 |---|---|---|
-| **Standard / library** | `src/cli.py` (`python -m src.cli build`) | Хук + тело на TTS + авто/ручной b-roll + CTA + субтитры + музыка из `VideoScript` JSON. |
-| **Talking-head clean** | `render_talking_head_dynamic_clean.py` (+ `talking_head_retake_planner.py`) | Чистка сырого talking-head материала: удаление пауз/дублей, HDR→SDR, вертикаль, опционально субтитры. |
-| **Ref-style directed** | `render_ref_style_directed.py` | Смысловой режиссёр раскладывает транскрипт по 5 визуальным форматам с продуктовым b-roll, подписями, музыкой. |
-| **Reel Matrix** | `reel_matrix.py` | Смешивает взаимозаменяемые блоки хук × порядок-подсказок × cta во множество уникальных видео. |
-| **3-strip** | `three_strip/build_3strip.zsh` | Три горизонтальных клипа, сложенных в 9:16, асинхронный каскад. Управляется конфигом. |
+| **Broll-рилс с ElevenLabs** *(Standard / library)* | `src/cli.py` (`python -m src.cli build`) | AI-озвучка (ElevenLabs) + авто/ручной b-roll + субтитры + музыка, плюс хук и CTA из библиотеки. Из `VideoScript` JSON. |
+| **Говорящая голова** *(talking-head clean)* | `render_talking_head_dynamic_clean.py` (+ `talking_head_retake_planner.py`) | Чистка сырого talking-head материала: удаление пауз/дублей, HDR→SDR, вертикаль, опционально субтитры. |
+| **Демо продукта** *(ref-style — в разработке)* | `render_ref_style_directed.py` | Смысловой режиссёр раскладывает транскрипт по 5 визуальным форматам с продуктовым b-roll, подписями, музыкой. |
+| **Много рилсов** *(Reel Matrix — в разработке)* | `reel_matrix.py` | Из сменных блоков (вступления × серединки × концовки) собирает все сочетания — множество уникальных рилсов. |
+| **Динамичный рилс** *(3-strip)* | `three_strip/build_3strip.zsh` | Три горизонтальных клипа, сложенных в 9:16, асинхронный каскад. Управляется конфигом. |
 | **QA (ref-style)** | `qa_ref_style.py` | Проверяет готовое видео: спецификацию, мёртвый эфир, размытие HDR, подписи, громкость. |
 
 Каждая точка входа на Python поддерживает `--help`. Смотрите `../docs/modes.md`
