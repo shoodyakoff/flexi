@@ -596,7 +596,10 @@ def validate(script: Path = typer.Argument(..., help="Path to script JSON")):
     if rhythm_profile not in cfg.rhythm_profiles:
         raise typer.BadParameter(f"rhythm_profile '{rhythm_profile}' not in config.yaml")
 
-    validate_assets(vs.slug, vs.hook_id, vs.cta_id)
+    try:
+        validate_assets(vs.slug, vs.hook_id, vs.cta_id)
+    except (ValueError, FileNotFoundError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
     if vs.broll_strategy == "manual" and not vs.broll_ids_override:
         raise typer.BadParameter("broll_ids_override required for strategy 'manual'")
@@ -1048,7 +1051,10 @@ def _run_build(
     output_slug = _output_slug(vs.slug, output_suffix)
     console.rule(f"[bold]Building: {output_slug}[/bold]")
 
-    validate_assets(vs.slug, vs.hook_id, vs.cta_id)
+    try:
+        validate_assets(vs.slug, vs.hook_id, vs.cta_id)
+    except (ValueError, FileNotFoundError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
     style_id = _subtitle_style_id(vs, cfg)
     style = _subtitle_style(vs, cfg)
     hook_style_id = _hook_subtitle_style_id(cfg, style_id)

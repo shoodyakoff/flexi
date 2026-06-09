@@ -18,8 +18,9 @@ docs for the pipeline you'll use.
 > (see "Onboard in Russian" under Operating rules). Human onboarding:
 > `НАЧНИ_ЗДЕСЬ.md`.
 
-1. **System deps** — `ffmpeg` (with libass), `python3` ≥ 3.10. The 3-strip and
-   talking-head pipelines also use `ffprobe` (ships with ffmpeg).
+1. **System deps** — `ffmpeg` (with libass), `python3` ≥ 3.10 (recommended:
+   **3.12** — see the version note below). The 3-strip and talking-head
+   pipelines also use `ffprobe` (ships with ffmpeg).
 2. **Python env**:
    ```bash
    python3 -m venv .venv
@@ -150,8 +151,9 @@ local input, never source of truth.
 - **Onboard in Russian, and do the setup yourself.** The user is a Russian-
   speaking non-developer — never make them run terminal commands. Offer to install
   everything ("да, могу всё поставить сам — напишу, когда будет готово"), then do
-  it: create `.venv` with a wheel-stable Python (3.12/3.13 — the newest Python may
-  lack prebuilt ML wheels), `pip install -r requirements.txt`, and `brew install`
+  it: create `.venv` with **Python 3.12** (the wheel-stable target — the newest
+  Python may lack prebuilt ML wheels; 3.13 also dropped stdlib `audioop`),
+  `pip install -r requirements.txt`, and `brew install`
   any missing system dep (ffmpeg) after asking. Run `python3 check_setup.py`
   before/after and report readiness **simply, in Russian**. Point them to
   `НАЧНИ_ЗДЕСЬ.md`.

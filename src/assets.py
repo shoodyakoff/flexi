@@ -146,10 +146,17 @@ def resolve_asset_entry_path(
 def get_asset_path(asset_type: AssetType, asset_id: str, *, prefer_ingest: bool = True) -> Path:
     meta = load_asset_meta(asset_type)
     if asset_id not in meta:
-        raise ValueError(f"Asset '{asset_id}' not found in {asset_type}/_meta.json")
+        raise ValueError(
+            f"Asset '{asset_id}' is not registered in assets/{asset_type}/_meta.json. "
+            f"Drop the clip into assets/{asset_type}/ and list it there "
+            f"(or run `scan-assets {asset_type}`)."
+        )
     path = resolve_asset_entry_path(asset_type, meta[asset_id], prefer_ingest=prefer_ingest)
     if not path.exists():
-        raise FileNotFoundError(f"Asset file missing on disk: {path}")
+        raise FileNotFoundError(
+            f"Asset '{asset_id}' is registered in assets/{asset_type}/_meta.json "
+            f"but its file is missing on disk: {path}"
+        )
     return path
 
 

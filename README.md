@@ -30,7 +30,7 @@ Claude Code, который сам онбордится из `CLAUDE.md`).
 ## Требования
 
 - **ffmpeg** (с libass) и **ffprobe**
-- **Python** ≥ 3.10
+- **Python** ≥ 3.10 (рекомендуется **3.12** — самая стабильная по готовым колёсам; на 3.13 не проверяется)
 - **Ключ API ElevenLabs** — только для закадровой озвучки через TTS ([elevenlabs.io](https://elevenlabs.io))
 - **zsh** — только для пайплайна 3-strip
 
@@ -49,9 +49,9 @@ python3 check_setup.py        # проверка готовности (по-ру
 
 ```bash
 # Standard / library — собрать рилс из VideoScript JSON
-.venv/bin/python -m src.cli build scripts/example.json
-.venv/bin/python -m src.cli validate scripts/example.json
-.venv/bin/python -m src.cli --help          # все подкоманды
+.venv/bin/python -m src.cli --help                         # все подкоманды (работает сразу)
+.venv/bin/python -m src.cli validate scripts/example.json  # проверит формат; подскажет, какой хук/CTA добавить
+.venv/bin/python -m src.cli build scripts/example.json     # соберёт рилс — нужны хук, CTA и b-roll в assets/
 
 # Talking-head clean / Ref-style / Reel Matrix
 .venv/bin/python pipelines/render_talking_head_dynamic_clean.py --help
@@ -65,7 +65,7 @@ zsh pipelines/three_strip/build_3strip.zsh pipelines/three_strip/episodes/myday.
 
 Или через Makefile: `make test`, `make validate SCRIPT=…`, `make build SCRIPT=…`.
 
-> `scripts/example.json` показывает формат `VideoScript`. `validate` и `build` разрешают `hook_id` / `cta_id` / b-roll из `assets/*/_meta.json`, поэтому сначала зарегистрируй там свои клипы хука / CTA / b-roll (см. `assets/README.md`).
+> `scripts/example.json` показывает формат `VideoScript`. `validate` и `build` разрешают `hook_id` / `cta_id` / b-roll из `assets/*/_meta.json`, поэтому сначала зарегистрируй там свои клипы хука / CTA / b-roll (см. `assets/README.md`). Без них команда не падает трейсбэком, а печатает понятное сообщение с тем, что добавить (медиа в git не хранится, поэтому готовых клипов в репозитории нет).
 
 ## Конфигурация
 

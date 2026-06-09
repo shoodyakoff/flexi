@@ -9,11 +9,18 @@ Everything you need to produce vertical reels (9:16, 1080x1920, 30fps) with Clau
 
 ## Requirements
 
+> **Note.** The project's production routes (see `CLAUDE.md`) run on the bundled
+> `src/` engine and `requirements.txt` only — transcription there uses
+> `faster-whisper` / `stable-ts`, **not** the `whisper` CLI. The tools marked
+> *(optional, external)* below are only for the ad-hoc command-line recipes in
+> this skill; install them separately when a recipe calls for one, and don't add
+> them to `requirements.txt`.
+
 - **ffmpeg** (with libass, drawtext filters)
-- **whisper** (OpenAI Whisper CLI)
 - **Python 3** with Pillow (`pip install Pillow`)
 - **ElevenLabs API key** (for TTS voiceover)
-- **yt-dlp** (for downloading reference reels)
+- **whisper** — *(optional, external)* OpenAI Whisper CLI: `pip install openai-whisper`. The pipelines themselves use `faster-whisper`/`stable-ts` instead.
+- **yt-dlp** — *(optional, external)* for downloading reference reels: `pip install yt-dlp`
 
 ---
 

@@ -10,8 +10,8 @@ to run install commands — offer to do it and do it yourself. On a fresh clone,
 when the user is new / stuck on setup / asks "с чего начать" / "что делать", run
 `python3 check_setup.py` (readiness check: system deps, Python env, keys, media
 inventory, and which routes are buildable), then set things up for them: create
-`.venv` with a wheel-stable Python (3.12/3.13; the newest Python may lack ML
-wheels), `pip install -r requirements.txt`, and `brew install` any missing system
+`.venv` with **Python 3.12** (the wheel-stable target; the newest Python may lack
+ML wheels), `pip install -r requirements.txt`, and `brew install` any missing system
 dep (ffmpeg) after asking. Report readiness simply and point them to
 `НАЧНИ_ЗДЕСЬ.md`.
 

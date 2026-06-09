@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import audioop
 import json
 import math
 import subprocess
@@ -9,6 +8,7 @@ import sys
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 
@@ -198,7 +198,9 @@ def detect_silences(path: Path, threshold_db: float, min_silence: float) -> list
     silent_flags: list[bool] = []
     for start in range(0, len(pcm) - frame_bytes + 1, frame_bytes):
         frame = pcm[start : start + frame_bytes]
-        rms = audioop.rms(frame, 2)
+        # RMS of signed 16-bit PCM (replaces stdlib audioop, removed in Python 3.13).
+        samples = np.frombuffer(frame, dtype=np.int16)
+        rms = float(np.sqrt(np.mean(np.square(samples, dtype=np.float64)))) if samples.size else 0.0
         db = -100.0 if rms <= 0 else 20 * math.log10(rms / 32768)
         silent_flags.append(db < threshold_db)
 

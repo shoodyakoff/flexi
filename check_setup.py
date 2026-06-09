@@ -173,7 +173,7 @@ def main() -> int:
 
     pv = sys.version_info
     if pv >= (3, 10):
-        item("ok", f"Python {pv.major}.{pv.minor}  {dim('(нужно ≥ 3.10)')}")
+        item("ok", f"Python {pv.major}.{pv.minor}  {dim('(нужно ≥ 3.10, рекомендуется 3.12)')}")
     else:
         item("bad", f"Python {pv.major}.{pv.minor} — слишком старый",
              "нужен Python ≥ 3.10 (python.org)")
