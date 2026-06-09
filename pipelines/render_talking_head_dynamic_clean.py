@@ -39,6 +39,8 @@ except ModuleNotFoundError:
         plan_retakes_from_decisions,
     )
 
+from src.output_paths import latest_version_dir, seed_reusable, versioned_dir
+
 CONFIG_PATH = ROOT / "config.yaml"
 OUTPUT_ROOT = ROOT / "output"
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv"}
@@ -966,6 +968,62 @@ def burn_subtitles(clean_video: Path, ass_path: Path, out_path: Path, cfg: objec
     return out_path
 
 
+def burn_title_overlay(
+    base_video: Path,
+    title_clip: Path,
+    out_path: Path,
+    cfg: object,
+    *,
+    fade_out_sec: float | None = None,
+) -> Path:
+    """Overlay an animated challenge-title clip (text on a black background,
+    pre-positioned top-left) onto the START of ``base_video`` for the title's
+    own duration. The black background is keyed out and the title fades out at
+    its end, so it disappears gracefully. Audio is copied untouched."""
+    title_cfg = cfg.title_overlay
+    fade = title_cfg.fade_out_sec if fade_out_sec is None else fade_out_sec
+    fade_start = max(0.0, ffprobe_duration(title_clip) - fade)
+    title_chain = (
+        f"[1:v]colorkey={title_cfg.colorkey_color}:{title_cfg.colorkey_similarity}:"
+        f"{title_cfg.colorkey_blend},format=rgba,"
+        f"fade=t=out:st={fade_start:.3f}:d={fade:.3f}:alpha=1[ttl]"
+    )
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(base_video),
+            "-i",
+            str(title_clip),
+            "-filter_complex",
+            f"{title_chain};[0:v][ttl]overlay=0:0:eof_action=pass[v]",
+            "-map",
+            "[v]",
+            "-map",
+            "0:a?",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "20",
+            "-r",
+            str(FPS),
+            "-x264-params",
+            X264_COLOR_PARAMS,
+            *COLOR_TAGS,
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(out_path),
+        ],
+        "overlay challenge title",
+    )
+    return out_path
+
+
 def render_talking_head_subtitles(
     *,
     clean_video: Path,
@@ -1193,6 +1251,7 @@ def write_metadata(
     chunks: list[EditChunk],
     final: Path,
     subtitle_artifacts: dict | None = None,
+    title_artifacts: dict | None = None,
     args: argparse.Namespace,
 ) -> None:
     edit_notes = [
@@ -1201,7 +1260,9 @@ def write_metadata(
     if subtitle_artifacts:
         edit_notes.append("Subtitles are burned into final_subtitled.mp4 using the standard subtitle renderer.")
     else:
-        edit_notes.append("Subtitles, titles, music, brand overlays, and look effects are intentionally disabled.")
+        edit_notes.append("Subtitles, music, brand overlays, and look effects are intentionally disabled.")
+    if title_artifacts:
+        edit_notes.append("An animated challenge title is overlaid onto the start, producing final_titled.mp4.")
 
     (out_dir / "edit_decisions.json").write_text(
         json.dumps(
@@ -1243,6 +1304,7 @@ def write_metadata(
                     "enabled": False,
                     "style": args.subtitle_style,
                 },
+                "title_overlay": title_artifacts or {"enabled": False},
             },
             ensure_ascii=False,
             indent=2,
@@ -1255,7 +1317,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render a clean dynamic talking-head edit with optional standard-style subtitles."
     )
-    parser.add_argument("--slug", required=True, help="Output folder name under output/.")
+    parser.add_argument("--slug", required=True, help="Video folder name under output/. Versions live inside it.")
+    parser.add_argument(
+        "--version",
+        help="Render into a specific version subfolder (e.g. v2), overwriting it. "
+        "Default: create the next vN so previous renders are kept.",
+    )
     parser.add_argument("--input", action="append", required=True, type=Path, help="Raw talking-head source video.")
     parser.add_argument("--broll", action="append", default=[], type=Path, help="Optional b-roll video file.")
     parser.add_argument("--broll-dir", type=Path, help="Optional directory with b-roll video files.")
@@ -1291,6 +1358,19 @@ def parse_args() -> argparse.Namespace:
         "--subtitle-style",
         help="Subtitle style from config.yaml. Defaults to edit_profile.subtitle_style, usually editorial_pop.",
     )
+    parser.add_argument(
+        "--title",
+        type=Path,
+        help="Animated challenge-title clip (text on a black background, 1080x1920, "
+        "pre-positioned top-left). Overlaid onto the start of the video, producing "
+        "an additional final_titled.mp4. Keying/fade defaults: config.yaml title_overlay.",
+    )
+    parser.add_argument(
+        "--title-fade-out-sec",
+        type=float,
+        default=None,
+        help="Override the title fade-out duration (default: title_overlay.fade_out_sec).",
+    )
     return parser.parse_args()
 
 
@@ -1312,8 +1392,10 @@ def main() -> None:
         broll_dir,
     )
 
-    out_dir = OUTPUT_ROOT / args.slug
-    out_dir.mkdir(parents=True, exist_ok=True)
+    base_dir = OUTPUT_ROOT / args.slug
+    previous_dir = latest_version_dir(base_dir)
+    out_dir = versioned_dir(base_dir, version=args.version)
+    seed_reusable(previous_dir, out_dir, ["*.transcript.json*"])
     review_path = retake_review_path(args, out_dir)
 
     speech: list[SpeechSegment] = []
@@ -1402,6 +1484,26 @@ def main() -> None:
             args=args,
         )
         final = out_dir / "final_subtitled.mp4"
+
+    title_artifacts = None
+    if args.title:
+        title_clip = args.title.resolve() if args.title.is_absolute() else (ROOT / args.title).resolve()
+        if not title_clip.exists():
+            raise FileNotFoundError(title_clip)
+        titled = burn_title_overlay(
+            final,
+            title_clip,
+            out_dir / "final_titled.mp4",
+            _load_render_config(),
+            fade_out_sec=args.title_fade_out_sec,
+        )
+        title_artifacts = {
+            "enabled": True,
+            "clip": display_path(title_clip),
+            "final": display_path(titled),
+        }
+        final = titled
+
     write_metadata(
         out_dir=out_dir,
         sources=sources,
@@ -1410,6 +1512,7 @@ def main() -> None:
         chunks=chunks,
         final=final,
         subtitle_artifacts=subtitle_artifacts,
+        title_artifacts=title_artifacts,
         args=args,
     )
     print(final)

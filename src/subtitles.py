@@ -318,9 +318,21 @@ def _text_width(
         return _approximate_text_width(text, font_size, family=family)
 
 
-def _position_tag(safe_box: SubtitleSafeBoxConfig | None, *, y_offset_px: int = 0) -> str:
+def _position_tag(
+    safe_box: SubtitleSafeBoxConfig | None,
+    *,
+    y_offset_px: int = 0,
+    section: str = "body",
+) -> str:
     if safe_box is None:
         return "{\\an8}"
+    body_bottom = section not in {"hook", "cta"} and (
+        getattr(safe_box, "body_caption_position", "bottom") == "bottom"
+    )
+    if body_bottom:
+        # Bottom-anchored (an2) just above the bottom safe padding.
+        y = safe_box.play_res_y - safe_box.bottom_padding_px - y_offset_px
+        return f"{{\\an2\\pos({safe_box.center_x},{y})}}"
     return f"{{\\an8\\pos({safe_box.center_x},{safe_box.top_padding_px + y_offset_px})}}"
 
 
@@ -532,10 +544,17 @@ def _template_for_group(group: list[_SubtitleToken], accent_indexes: set[int]) -
     return "small_over_big"
 
 
-def _zone_for_caption_group(section: str) -> str:
+def _zone_for_caption_group(
+    section: str,
+    safe_box: SubtitleSafeBoxConfig | None = None,
+) -> str:
     if section in {"hook", "cta"}:
         return "bottom_third_center"
-    return "top_center"
+    # Body captions: bottom (lower third) by default, top only when configured
+    # (e.g. when the lower frame is reserved for b-roll).
+    if safe_box is not None and getattr(safe_box, "body_caption_position", "bottom") == "top":
+        return "top_center"
+    return "lower_center"
 
 
 def _base_position_for_zone(
@@ -606,7 +625,7 @@ def _caption_token_layout(
     section: str,
     cfg: Config | None,
 ) -> _CaptionPlanGroup:
-    zone = _zone_for_caption_group(section)
+    zone = _zone_for_caption_group(section, safe_box)
     x, y = _base_position_for_zone(safe_box, zone)
     phrase_indexes = _phrase_accent_indexes(group, style)
     primary_accent = _accent_index_for_group(group, style)
@@ -1250,7 +1269,7 @@ def transcript_to_ass(
     events: list[str] = []
     warnings: list[str] = []
 
-    base_prefix = _position_tag(safe_box)
+    base_prefix = _position_tag(safe_box, section=section)
 
     tokens = _subtitle_tokens(transcript, style)
     chunks = _chunk_tokens(tokens, style)
@@ -1298,7 +1317,7 @@ def transcript_to_ass(
         start, end = intervals[index]
         if style.ghost_preflash:
             ghost_prefix = (
-                f"{_position_tag(safe_box, y_offset_px=style.ghost_offset_px)}"
+                f"{_position_tag(safe_box, y_offset_px=style.ghost_offset_px, section=section)}"
                 f"{_ghost_tags(style, accent=accent)}"
             )
             events.append(

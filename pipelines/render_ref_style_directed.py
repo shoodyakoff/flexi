@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.output_paths import versioned_dir
 from src.ref_style_director import RefStyleEditPlan, build_director_prompt, build_edit_plan
 from src.schemas import Transcript, Word
 
@@ -1295,6 +1296,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", type=Path, default=ROOT / "new!.MOV")
     parser.add_argument("--transcript", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=ROOT / "output/ref-style-main/new_full_pipeline_v11.mp4")
+    parser.add_argument(
+        "--version",
+        default=None,
+        help="Render into a version subfolder of the output folder (e.g. v2), overwriting it. "
+        "Default: create the next vN so previous renders are kept.",
+    )
+    parser.add_argument(
+        "--no-version",
+        action="store_true",
+        help="Write straight to --output without a vN subfolder. For internal callers "
+        "(e.g. reel_matrix) that render into a scratch path.",
+    )
     parser.add_argument("--product", type=Path, action="append", default=None)
     parser.add_argument("--music", type=Path, default=ROOT / "assets/music/provocative.mp3")
     parser.add_argument("--sfx", type=Path, default=ROOT / "assets/sounds/swoosh.mp3")
@@ -1354,6 +1367,11 @@ def default_product_paths() -> list[Path]:
 def main() -> None:
     args = parse_args()
     output = resolve_path(args.output)
+    # Keep versions of the same video together: place the output file inside a
+    # vN subfolder of its target folder instead of spawning sibling folders.
+    # Internal callers (reel_matrix) pass --no-version to render to a scratch path.
+    if not args.no_version:
+        output = versioned_dir(output.parent, version=args.version) / output.name
     source = resolve_path(args.source)
     products = (
         [resolve_path(path) for path in args.product]

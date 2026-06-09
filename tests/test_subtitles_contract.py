@@ -260,7 +260,8 @@ class SubtitleContractTest(unittest.TestCase):
         self.assertEqual(ass.count("Dialogue:"), 4)
         self.assertIn(r"Dialogue: 0", ass)
         self.assertIn(r"Dialogue: 1", ass)
-        self.assertIn(r"\pos(540,262)", ass)
+        # Body captions are bottom-anchored by default (an2, just above the bottom safe pad).
+        self.assertIn(r"\an2\pos(540,1460)", ass)
         self.assertIn(r"\fnBebas Neue Cyrillic", ass)
         self.assertIn(r"\1c&H0000F5FF", ass)
         self.assertIn(r"\alpha&HFF&", ass)

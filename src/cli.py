@@ -37,6 +37,7 @@ from .broll_preview import render_broll_preview
 from .advanced_runtime import build_block_plan
 from .diagnostics import write_render_diagnostics
 from .hook_montage import hook_effect_end_sec, render_hook_montage
+from .output_paths import latest_version_dir, seed_reusable, versioned_dir
 from .rhythm_planner import plan_broll
 from .schemas import (
     AssetEntry,
@@ -388,12 +389,18 @@ def build(
         "--output-suffix",
         help="Append a suffix to the output folder, useful for A/B runs.",
     ),
+    version: Optional[str] = typer.Option(
+        None,
+        "--version",
+        help="Render into a specific version subfolder (e.g. v2), overwriting it. "
+        "Default: create the next vN so previous renders are kept.",
+    ),
 ):
     """Run the full pipeline: TTS → transcribe → subtitles → b-roll → assemble."""
     vs = _load_script(script)
     cfg, active_preset = _resolve_build_config(_load_config(), vs, tts_preset=tts_preset)
     vs = _with_subtitle_style(vs, cfg, subtitle_style)
-    _run_build(vs, cfg, output_suffix=output_suffix or active_preset or subtitle_style)
+    _run_build(vs, cfg, output_suffix=output_suffix or active_preset or subtitle_style, version=version)
 
 
 @app.command()
@@ -414,14 +421,22 @@ def preview(
         "--output-suffix",
         help="Append a suffix to the output folder, useful for A/B runs.",
     ),
+    version: Optional[str] = typer.Option(
+        None,
+        "--version",
+        help="Render into a specific version subfolder (e.g. v2), overwriting it. "
+        "Default: create the next vN so previous renders are kept.",
+    ),
 ):
     """TTS + subtitles only — no video assembly. Fast iteration on text."""
     vs = _load_script(script)
     cfg, active_preset = _resolve_build_config(_load_config(), vs, tts_preset=tts_preset)
     vs = _with_subtitle_style(vs, cfg, subtitle_style)
 
-    out_dir = Path(cfg.output_dir) / _output_slug(vs.slug, output_suffix or active_preset or subtitle_style)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    preview_base = Path(cfg.output_dir) / _output_slug(vs.slug, output_suffix or active_preset or subtitle_style)
+    previous_dir = latest_version_dir(preview_base)
+    out_dir = versioned_dir(preview_base, version=version)
+    seed_reusable(previous_dir, out_dir, ["voiceover.mp3", "*.hash", "transcript.json"])
     vo_path, transcript, _, _, _ = _prepare_voiceover_assets(vs, cfg, out_dir)
     style = _subtitle_style(vs, cfg)
     ass_path = out_dir / "subtitles.ass"
@@ -1022,7 +1037,12 @@ def new_script(
         _run_build(script_data, cfg, output_suffix=requested_tts_preset)
 
 
-def _run_build(vs: VideoScript, cfg: Config, output_suffix: Optional[str] = None) -> None:
+def _run_build(
+    vs: VideoScript,
+    cfg: Config,
+    output_suffix: Optional[str] = None,
+    version: Optional[str] = None,
+) -> None:
     """Shared build logic used by `build` and `new`."""
     t0 = time.time()
     output_slug = _output_slug(vs.slug, output_suffix)
@@ -1034,8 +1054,10 @@ def _run_build(vs: VideoScript, cfg: Config, output_suffix: Optional[str] = None
     hook_style_id = _hook_subtitle_style_id(cfg, style_id)
     hook_style = style if hook_style_id == style_id else cfg.subtitle_styles[hook_style_id]
 
-    out_dir = Path(cfg.output_dir) / output_slug
-    out_dir.mkdir(parents=True, exist_ok=True)
+    build_base = Path(cfg.output_dir) / output_slug
+    previous_dir = latest_version_dir(build_base)
+    out_dir = versioned_dir(build_base, version=version)
+    seed_reusable(previous_dir, out_dir, ["voiceover.mp3", "*.hash", "transcript.json"])
     (
         vo_path,
         transcript,

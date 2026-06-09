@@ -33,6 +33,8 @@ ROOT = Path(__file__).resolve().parent.parent
 for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+from src.output_paths import versioned_dir
+
 RAW_DIR = ROOT / "raw"
 W, H, FPS = 1080, 1920, 30
 VIDEO_EXTS = {".mp4", ".mov", ".m4v"}
@@ -423,7 +425,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     render_out = work / f"{tag}.mp4"  # sidecars land next to this, inside work/
     render = [sys.executable, str(ROOT / "pipelines/render_ref_style_directed.py"),
               "--source", str(assembled), "--transcript", str(merged_t),
-              "--skip-clean-prelayer", "--output", str(render_out)]
+              "--skip-clean-prelayer", "--no-version", "--output", str(render_out)]
     if overrides:
         ov_path = work / f"asm_{tag}.product_overrides.json"
         ov_path.write_text(json.dumps(overrides, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -433,8 +435,9 @@ def cmd_build(args: argparse.Namespace) -> int:
     res = subprocess.run(render, cwd=ROOT, text=True, capture_output=True, env=env)
     if res.returncode != 0:
         raise RuntimeError("render failed\n" + res.stdout[-1500:] + res.stderr[-1500:])
-    # Deliver ONLY the finished video into the clean production folder.
-    final = args.output or (d / "final" / f"{tag}.mp4")
+    # Deliver ONLY the finished video into the clean production folder. Each
+    # re-render of the same combo becomes a new version inside final/<tag>/.
+    final = args.output or (versioned_dir(d / "final" / tag) / f"{tag}.mp4")
     final.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(render_out, final)
     print(final)

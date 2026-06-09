@@ -22,8 +22,26 @@ import argparse, json, re, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from src.output_paths import latest_version_dir, versioned_dir  # noqa: E402
+
 TAIL_WARN = 0.40      # хвост тишины больше этого — предупреждение
 CLIP_FAIL = 0.03      # подрез/обрыв больше этого — ошибка
+
+
+def slug_dir(slug: str, version: str | None = None) -> Path:
+    """Resolve output/<slug> to a concrete version folder.
+
+    Versions of one video live in vN subfolders; --version picks one, otherwise
+    we use the `latest` pointer. Falls back to the base folder for legacy flat
+    layouts that predate versioning.
+    """
+    base = ROOT / "output" / slug
+    if version:
+        return versioned_dir(base, version=version)
+    latest = latest_version_dir(base)
+    return latest if latest is not None else base
 
 
 def silences(source: Path, noise: float, min_sil: float) -> list[tuple[float, float]]:
@@ -45,7 +63,7 @@ def silences(source: Path, noise: float, min_sil: float) -> list[tuple[float, fl
 
 def resolve(args) -> tuple[Path, Path, Path]:
     if args.slug:
-        d = ROOT / "output" / args.slug
+        d = slug_dir(args.slug, getattr(args, "version", None))
         meta = json.loads((d / "render_metadata.json").read_text())
         source = Path(meta["inputs"][0])
         source = source if source.is_absolute() else ROOT / source
@@ -59,6 +77,7 @@ def resolve(args) -> tuple[Path, Path, Path]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slug")
+    ap.add_argument("--version", help="QA a specific version subfolder (e.g. v2). Default: latest.")
     ap.add_argument("--source"); ap.add_argument("--plan"); ap.add_argument("--transcript")
     ap.add_argument("--noise", type=float, default=-30.0)
     ap.add_argument("--min-sil", type=float, default=0.12)

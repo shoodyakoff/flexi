@@ -49,7 +49,7 @@ request to a route by the **"User says (RU)"** trigger phrases.
 | # | Pipeline — RU name | Use when | User says (RU) | Entry point |
 |---|---|---|---|---|
 | 1 | **Broll-рилс с ElevenLabs** (Standard / library) | Hook + TTS voiceover + auto/manual b-roll + CTA + subtitles + music, assembled from a `VideoScript` JSON. The base route. | «собери Broll-рилс», «сделай рилс из этого текста / сценария», «рилс с озвучкой и вставками» | `python -m src.cli build scripts/<slug>.json` |
-| 2 | **Говорящая голова** (Talking-head clean) | You have raw talking-head footage and want a clean dynamic cut (silence/retake removal, HDR→SDR, vertical), optionally subtitled. | «почисти это видео / интервью», «убери паузы и дубли», «собери говорящую голову», «сделай вертикальным с субтитрами» | `python pipelines/render_talking_head_dynamic_clean.py` |
+| 2 | **Говорящая голова** (Talking-head clean) | You have raw talking-head footage and want a clean dynamic cut (silence/retake removal, HDR→SDR, vertical), optionally subtitled, optionally with an animated title overlaid at the start (see `--title` below). | «почисти это видео / интервью», «убери паузы и дубли», «собери говорящую голову», «сделай вертикальным с субтитрами», «добавь заголовок челленджа» | `python pipelines/render_talking_head_dynamic_clean.py` |
 | 3 | **Демо продукта** (Ref-style directed, `custom_graphics`) — *WIP* | Turn a transcript into a directed montage across **5 visual formats** with product b-roll, burned captions, music. | «сделай видео с демо продукта», «собери демо» | `python pipelines/render_ref_style_directed.py` |
 | 4 | **Много рилсов** (Reel Matrix) — *WIP* | Shoot interchangeable hook/tip/cta blocks and mix them into many unique videos (combinatorial, on top of #2+#3). | «сделай серию рилсов из файлов», «собери серию рилсов», «нужно много вариантов», «перемешай вступления и концовки» | `python pipelines/reel_matrix.py` |
 | 5 | **Динамичный рилс** (3-strip) | Three horizontal clips stacked in one 9:16 frame, asynchronous cascade. Config-driven; great for "a day of footage". | «собери динамичный рилс», «три клипа в одном кадре из сегодняшних видео» | `zsh pipelines/three_strip/build_3strip.zsh episodes/<name>.conf` |
@@ -57,6 +57,14 @@ request to a route by the **"User says (RU)"** trigger phrases.
 
 Routes **#3 (Демо продукта)** and **#4 (Много рилсов)** are *work-in-progress* —
 usable but not yet stable; tell the user so if they pick one.
+
+**«Добавь заголовок челленджа»** (talking-head add-on): when the user asks to add a
+challenge title, they have an exported **animated title clip** — text on a **black
+background**, 1080×1920, text pre-positioned top-left. Sort it into `assets/titles/`
+(see the inbox table) and pass it to route #2 via `--title assets/titles/<file>.mp4`.
+The pipeline keys out the black background, overlays the title onto the **start** of
+the video, and fades it out at its end — producing an extra `final_titled.mp4`
+(subtitles stay at the bottom). Keying/fade defaults: `config.yaml → title_overlay`.
 
 The **5 ref-style formats**: `hook_metal` → `framed_face` → `turn_badge` →
 `blue_demo` → `lower_demo_cta` (semantic order, not a fixed rotation).
@@ -116,6 +124,7 @@ At the **start of any task that needs media**, before building:
 | Product / screen-demo clips | `assets/broll_brand/` | referenced as the product insert (script / `config.yaml`) |
 | Ready hook clip (opener) | `assets/hooks/` | add an entry to `assets/hooks/_meta.json` (or `scan-assets hooks` when a human drives the prompts) |
 | Ready CTA clip (ending) | `assets/ctas/` | add an entry to `assets/ctas/_meta.json` (or `scan-assets ctas`) |
+| Animated title clip (text on **black** bg, 1080×1920, opener — «заголовок челленджа») | `assets/titles/` | pass its path to the talking-head pipeline via `--title assets/titles/<file>.mp4` |
 | Music track | `assets/music/` | point `config.yaml → edit_profile.music_file` at it |
 | SFX (riser, swoosh…) | `assets/sounds/` | referenced by name in `config.yaml` |
 | Overlay icon (PNG glyph) | `assets/hook_overlays/` | add its keyword(s) to `assets/hook_overlays/_meta.json` |
@@ -148,6 +157,10 @@ local input, never source of truth.
   `НАЧНИ_ЗДЕСЬ.md`.
 - `config.yaml` is the single source of render/TTS/subtitle defaults. Change
   behavior there, not by hardcoding.
+- **Renders are versioned: `output/<slug>/v<N>/`** with a `latest` symlink to the
+  newest. Re-rendering a video adds a new `vN` in the *same* folder (never a
+  sibling folder); pass `--version vN` to overwrite one. Shared logic lives in
+  `src/output_paths.py` — reuse it in any new route. Details in `AGENTS.md`.
 - **iPhone rotation tags lie** — for the 3-strip / talking-head routes, verify
   clip orientation by eye on a frame with a horizon, not by metadata.
 - After a render, run the matching QA check and report the output path + any QA

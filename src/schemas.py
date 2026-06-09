@@ -453,6 +453,11 @@ class SubtitleSafeBoxConfig(BaseModel):
     top_padding_px: int = 220
     bottom_padding_px: int = 460
     side_padding_px: int = 120
+    # Where the running body captions sit vertically. "bottom" = lower third
+    # (default, the standard reel look); "top" = upper area (use only when the
+    # lower part of the frame is reserved for b-roll). Hook/CTA captions are
+    # unaffected. Applies across every route that burns subtitles.
+    body_caption_position: str = "bottom"
 
     @model_validator(mode="after")
     def validate_safe_box(self) -> "SubtitleSafeBoxConfig":
@@ -1035,6 +1040,17 @@ class TTSConfig(BaseModel):
         return self
 
 
+class TitleOverlayConfig(BaseModel):
+    # Animated "challenge title" clip: text on a BLACK background, full-frame
+    # 1080x1920, pre-positioned top-left. It is overlaid onto the start of the
+    # video for its own duration. The black background is keyed out (colorkey)
+    # and the title fades out at its end so it disappears gracefully.
+    colorkey_color: str = "0x000000"
+    colorkey_similarity: float = 0.10
+    colorkey_blend: float = 0.08
+    fade_out_sec: float = 0.36
+
+
 class Config(BaseModel):
     output_dir: str
     video: VideoConfig
@@ -1053,6 +1069,7 @@ class Config(BaseModel):
     broll_rotation: BrollRotationConfig = BrollRotationConfig()
     beat: BeatConfig = BeatConfig()
     subtitle_safe_box: SubtitleSafeBoxConfig = SubtitleSafeBoxConfig()
+    title_overlay: TitleOverlayConfig = TitleOverlayConfig()
     annotation: AnnotationConfig = AnnotationConfig()
     subtitle_styles: dict[str, SubtitleStyle]
     whisper: WhisperConfig = WhisperConfig()

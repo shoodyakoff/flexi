@@ -29,6 +29,16 @@ not treat generated renders or cache files as source of truth. `config.yaml` is
 the single source of truth for render / TTS / subtitle / audio defaults — change
 behavior there, not by hardcoding.
 
+**Output layout — one folder per video, versions inside.** Every render route
+writes to `output/<slug>/v<N>/` (auto-incrementing) and refreshes an
+`output/<slug>/latest` symlink to the newest version — re-rendering the same
+video never spawns sibling folders (`video1`, `video1_v2`, `video1_auto`…). Pass
+`--version vN` to overwrite a specific version instead of creating a new one.
+This is centralized in `src/output_paths.py` (`versioned_dir`, `latest_version_dir`,
+`seed_reusable`); reuse it from any new route rather than re-deriving output paths.
+Expensive input-determined caches (Whisper transcripts, TTS audio) are seeded
+from the previous version so re-renders skip recompute.
+
 During long-running builds or renders, start the job and let it run without
 step-by-step progress messages unless the user explicitly asks for status.
 
