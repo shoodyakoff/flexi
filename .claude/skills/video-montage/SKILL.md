@@ -49,24 +49,7 @@ whisper audio.wav --model large-v3 --language ru --output_format srt --output_di
   --initial_prompt "speaker names, AI names, product names, technical terms"
 ```
 
-### 1.3 Error correction
-
-**NEVER use raw Whisper output.** Always review every line manually.
-
-Common Whisper error patterns:
-
-| Pattern | Example |
-|---------|---------|
-| Brand names garbled | "код-код-экси" → "Claude Code, Codex" |
-| Slang misheard | "позадрочишь" → "позадротишь" |
-| Numbers as words mixed up | "сторилл соус" → "сто рилсов" |
-| Spelling errors | "конкатинировать" → "конкатенировать" |
-| TTS responses missing | Quiet AI voice not transcribed → re-run with `large-v3` |
-| Word boundaries wrong | "вайп-код и шпродук" → "вайб-кодить продукт" |
-
-**Protocol:** Save corrected SRT as `audio_corrected.srt` — this is the source of truth.
-
-### 1.4 SRT → ASS conversion
+### 1.3 SRT → ASS conversion
 
 Use this script to convert SRT to ASS with word chunking (3 words per subtitle segment for TikTok-style pacing):
 
@@ -167,7 +150,7 @@ if __name__ == "__main__":
 | `impact` | Impact Bold | 90pt | 8px black | Meme/TikTok style, voiceover reels |
 | `helvetica` | Helvetica Neue Bold | 80pt | 3px black | Talking head, conversations, clean look |
 
-### 1.5 Bake subtitles into video
+### 1.4 Bake subtitles into video
 
 ```bash
 ffmpeg -y -i source_video.MOV \
