@@ -1,116 +1,105 @@
-# Production modes
+# Режимы продакшна
 
-One page: what each mode does, how they chain, and the commands.
+Одна страница: что делает каждый режим, как они выстраиваются в цепочку и какие команды использовать.
 
-## How the stages chain
+## Как стадии выстраиваются в цепочку
 
 ```
-raw camera clips
+сырые клипы с камеры
       │
       ▼
-[clean]  talking_head_dynamic_clean        per-clip cleanup:
-         (or reel_matrix clean_clip)        silence-cut · retake removal ·
-      │                                      HDR→SDR tonemap · vertical 1080×1920 · transcript
+[чистка]  talking_head_dynamic_clean       чистка каждого клипа:
+          (или reel_matrix clean_clip)      silence-cut · удаление дублей ·
+      │                                      HDR→SDR тонмаппинг · вертикаль 1080×1920 · транскрипт
       ▼
-[montage] custom_graphics (ref-style)       semantic director → 5 formats ·
-      │                                      product b-roll inserts · captions · music
+[монтаж] custom_graphics (ref-style)        семантический режиссёр → 5 форматов ·
+      │                                      врезки product b-roll · подписи · музыка
       ▼
-[orchestrate] Reel Matrix (optional)        mix hook × tip-order × cta → many unique videos
+[оркестрация] Reel Matrix (опционально)     микс хук × порядок-tip × cta → много уникальных видео
       │
       ▼
-[gate] QA layer                             dead air · HDR wash · spec · plan · audio
+[гейт] QA layer                             мёртвый эфир · HDR-замыв · спека · план · звук
       │
       ▼
-   final .mp4 (1080×1920, 30fps, bt709)
+   финал .mp4 (1080×1920, 30fps, bt709)
 ```
 
-A single video can stop after **montage**. The **Reel Matrix** wraps clean+montage to
-generate combinations. The **3-strip** route is a parallel montage style (three
-horizontal clips stacked in one frame) that goes straight from raw clips to a
-final. **QA** runs on any final.
+Отдельное видео может остановиться после стадии **монтажа**. **Reel Matrix** оборачивает чистку+монтаж, чтобы генерировать комбинации. Маршрут **3-strip** — это параллельный стиль монтажа (три горизонтальных клипа, сложенных в один кадр), который идёт напрямую от исходных клипов к финалу. **QA** запускается на любом финале.
 
-## Modes
+## Режимы
 
-| Mode / route | What it does | Tool |
+| Режим / маршрут | Что делает | Инструмент |
 |---|---|---|
-| **`talking_head_dynamic_clean`** | Clean raw talking-head footage: silence-cut, **retake/duble removal**, HDR tonemap, vertical normalize, optional subtitles. | `pipelines/render_talking_head_dynamic_clean.py` + `pipelines/talking_head_retake_planner.py` |
-| **`custom_graphics`** (ref-style **dynamic talking head**) | The "монтаж как ref": a semantic director maps the transcript to 5 visual formats, inserts product b-roll, burns captions, mixes music. | `pipelines/render_ref_style_directed.py` |
-| **Reel Matrix** | Modular combinatorial composer on top of `custom_graphics`: shoot interchangeable blocks, auto-classify, mix hook×tip-order×cta into many unique videos. | `pipelines/reel_matrix.py` |
-| **Standard / library** | The base pipeline: ready hook + TTS body + auto/manual b-roll + CTA + subtitles + music from a `VideoScript` JSON. | `src/cli.py` (`python -m src.cli build`) |
-| **3-strip** | Three horizontal clips stacked in one 9:16 frame, asynchronous cascade. Config-driven (one `.conf` per episode). | `pipelines/three_strip/build_3strip.zsh` |
-| **QA layer** | Gate a finished video against known failure modes. Not a mode — a check. | `pipelines/qa_ref_style.py` · `pipelines/three_strip/qa.py` |
+| **`talking_head_dynamic_clean`** | Чистит сырой talking-head материал: silence-cut, **удаление дублей/ретейков**, HDR-тонмаппинг, нормализация в вертикаль, опциональные субтитры. | `pipelines/render_talking_head_dynamic_clean.py` + `pipelines/talking_head_retake_planner.py` |
+| **`custom_graphics`** (ref-style **dynamic talking head**) | «Монтаж как ref»: семантический режиссёр сопоставляет транскрипт с 5 визуальными форматами, вставляет product b-roll, прожигает подписи, подмешивает музыку. | `pipelines/render_ref_style_directed.py` |
+| **Reel Matrix** | Модульный комбинаторный сборщик поверх `custom_graphics`: снимаете взаимозаменяемые блоки, авто-классификация, смешивание hook×tip-order×cta во множество уникальных видео. | `pipelines/reel_matrix.py` |
+| **Standard / library** | Базовый пайплайн: готовый хук + TTS-озвучка тела + авто/ручной b-roll + CTA + субтитры + музыка из `VideoScript` JSON. | `src/cli.py` (`python -m src.cli build`) |
+| **3-strip** | Три горизонтальных клипа, сложенных в один кадр 9:16, асинхронный каскад. Управляется конфигом (один `.conf` на эпизод). | `pipelines/three_strip/build_3strip.zsh` |
+| **QA layer** | Проверяет готовое видео на известные режимы отказа. Не режим — проверка. | `pipelines/qa_ref_style.py` · `pipelines/three_strip/qa.py` |
 
-> **`library_dynamic`** (head-less, product-first) was only a **draft** — **not implemented**.
+> **`library_dynamic`** (без головы, продукт прежде всего) был лишь **черновиком** — **не реализован**.
 
-## The 5 ref-style (`custom_graphics`) formats
+## 5 форматов ref-style (`custom_graphics`)
 
-1. `format_1_hook_metal` — emotional/problem hook (metal-sticker lettering, lower third)
-2. `format_2_framed_face` — calm explanation inside the yellow frame
-3. `format_3_turn_badge` — reveal / turn / proof
-4. `format_4_blue_demo` — product instruction/demo on the blue grid (big readable card)
-5. `format_5_lower_demo_cta` — closing CTA/link with a lower-third product demo
+1. `format_1_hook_metal` — эмоциональный/проблемный хук (надписи металлическими стикерами, нижняя треть)
+2. `format_2_framed_face` — спокойное объяснение внутри жёлтой рамки
+3. `format_3_turn_badge` — раскрытие / поворот / доказательство
+4. `format_4_blue_demo` — инструкция/демо продукта на синей сетке (большая читаемая карточка)
+5. `format_5_lower_demo_cta` — закрывающий CTA/ссылка с демо продукта в нижней трети
 
-Guardrails: semantic (not 1-2-3-4-5 rotation); no more than two identical formats in a
-row (a long demo run breaks back to the head); head cutaways punched into long demos.
+Ограничители: семантика (а не ротация 1-2-3-4-5); не более двух одинаковых форматов подряд (длинная серия демо возвращается к голове); врезки головы вставляются в длинные демо.
 
-## Reel Matrix — workflow
+## Reel Matrix — рабочий процесс
 
 ```bash
-# 0. Drop all clips (hooks, tips, ctas — any names) into raw/
+# 0. Сложите все клипы (hooks, tips, ctas — любые имена) в raw/
 
-# 1. Clean + classify every clip -> output/matrix/cleaned/ + output/matrix/manifest.json
+# 1. Чистка + классификация каждого клипа -> output/matrix/cleaned/ + output/matrix/manifest.json
 python pipelines/reel_matrix.py ingest --raw raw/
 
-# 2. Review output/matrix/manifest.json — fix any wrong `role` (classifier is a guess).
-#    Optionally set per-block product inserts (see below).
+# 2. Проверьте output/matrix/manifest.json — исправьте любой неверный `role` (классификатор лишь предполагает).
+#    При желании задайте врезки продукта по блокам (см. ниже).
 
-# 3. See the combination matrix (no render)
+# 3. Посмотрите матрицу комбинаций (без рендера)
 python pipelines/reel_matrix.py dryrun --dir output/matrix
 
-# 4. Render one combo (ordered block keys)
+# 4. Рендер одной комбинации (ключи блоков по порядку)
 python pipelines/reel_matrix.py build --dir output/matrix \
     --combo h2,t1,t2,t3,c2 --output output/matrix/final/h2_c2.mp4
 ```
 
-Filenames containing `hook`/`tip`/`cta` (or `h1`/`t2`/`c3`) override the content guess.
+Имена файлов, содержащие `hook`/`tip`/`cta` (или `h1`/`t2`/`c3`), переопределяют предположение по содержимому.
 
-### Output layout (`output/matrix/`)
-- `cleaned/` — one cleaned+transcribed clip per block (reused across combos)
-- `work/` — all assembly + render intermediates (base / ass / plan / diagnostics)
-- `final/` — **production videos only** — just the finished `.mp4`s, nothing else
+### Структура вывода (`output/matrix/`)
+- `cleaned/` — один очищенный+транскрибированный клип на блок (переиспользуется между комбинациями)
+- `work/` — все промежуточные файлы сборки и рендера (base / ass / plan / диагностика)
+- `final/` — **только продакшн-видео** — лишь готовые `.mp4`, больше ничего
 
-### Manifest per-block fields (edit by hand after ingest)
-- `role` — `hook` / `tip` / `cta` (fix any misclassification here)
-- `product` — product b-roll clip to insert on this block, e.g. `sa_2_demo.mp4`
-- `product_from` — delay the demo until this spoken word, e.g. `пиши`
-  (the talking head shows first, the demo appears when the voice reaches the word)
+### Поля manifest по блокам (правьте вручную после ingest)
+- `role` — `hook` / `tip` / `cta` (исправляйте любую ошибку классификации здесь)
+- `product` — клип product b-roll для вставки в этот блок, например `sa_2_demo.mp4`
+- `product_from` — отложить демо до этого произнесённого слова, например `пиши`
+  (сначала показывается talking head, демо появляется, когда голос доходит до слова)
 
-Product b-roll tags live in `assets/broll_brand/demo_tags.json`
-(`{clip.mp4: [keyword, ...]}`) and are matched to what is said on each demo beat.
+Теги product b-roll лежат в `assets/broll_brand/demo_tags.json`
+(`{clip.mp4: [keyword, ...]}`) и сопоставляются с тем, что говорится на каждом демо-такте.
 
-## 3-strip — workflow
+## 3-strip — рабочий процесс
 
-Three horizontal clips stacked in one 9:16 frame (~632px bands), with an
-**asynchronous cascade**: the middle band leads, top enters +0.5s, bottom +1.0s,
-then each band cuts on its own rhythm. The engine is config-driven — one `.conf`
-per episode, the engine and QA are reusable. Full ruleset: `pipelines/three_strip/RULES.md`.
+Три горизонтальных клипа, сложенных в один кадр 9:16 (полосы ~632px), с **асинхронным каскадом**: средняя полоса ведёт, верхняя входит на +0.5s, нижняя на +1.0s, затем каждая полоса нарезается в своём ритме. Движок управляется конфигом — один `.conf` на эпизод, движок и QA переиспользуемы. Полный свод правил: `pipelines/three_strip/RULES.md`.
 
 ```bash
-# 1. (optional) understand a long clip while authoring the edit
+# 1. (опционально) разобраться в длинном клипе при подготовке монтажа
 RAW=raw/myday zsh pipelines/three_strip/analyze.zsh 4907   # -> output/analyze/4907/sheet.png
 
-# 2. copy the template and author MID/TOP/BOT in it (index-aligned columns)
+# 2. скопируйте шаблон и пропишите в нём MID/TOP/BOT (колонки выровнены по индексу)
 cp pipelines/three_strip/episodes/example.conf pipelines/three_strip/episodes/myday.conf
 
-# 3. build (renders the cascade + bed outro + music, then auto-runs QA)
+# 3. сборка (рендерит каскад + bed-аутро + музыку, затем авто-запускает QA)
 zsh pipelines/three_strip/build_3strip.zsh pipelines/three_strip/episodes/myday.conf
 ```
 
-Key rules (see `RULES.md`): HDR→SDR tonemap; main action centered (center-crop);
-source audio off; never 3 lookalike clips in one trio; iPhone rotation tags lie
-(verify by eye, list flips in `NEED180`); bed bookend (open & close on the same
-calm shot). `three_strip/qa.py` checks format, no-3-same (phash≥10), dead bands,
-and face gaps, writing `qa_report.txt` + an annotated `qa_sheet.png`.
+Ключевые правила (см. `RULES.md`): HDR→SDR тонмаппинг; главное действие по центру (center-crop); звук источника выключен; никогда не 3 похожих клипа в одной тройке; теги поворота iPhone врут (проверяйте на глаз, перечисляйте перевороты в `NEED180`); обрамление кроватью (открывать и закрывать на одном и том же спокойном кадре). `three_strip/qa.py` проверяет формат, отсутствие 3 одинаковых (phash≥10), мёртвые полосы и пропуски лиц, записывая `qa_report.txt` + аннотированный `qa_sheet.png`.
 
 ## QA
 
@@ -118,8 +107,4 @@ and face gaps, writing `qa_report.txt` + an annotated `qa_sheet.png`.
 python pipelines/qa_ref_style.py --final output/matrix/final/h2_c2.mp4 --source raw/IMG_4804.MOV
 ```
 
-Checks: container spec (1080×1920 / 30fps / audio / bt709), **dead air** (FAIL > 0.9s),
-black frames, edit-plan sanity (known formats, ≤2 same in a row, coverage),
-subtitle ASR junk, product b-roll connected, loudness + true-peak, and an **HDR
-source → tonemap** check with an extracted frame for manual color review.
-Exit code = number of FAILs.
+Проверки: спецификация контейнера (1080×1920 / 30fps / звук / bt709), **мёртвый эфир** (FAIL > 0.9s), чёрные кадры, разумность плана монтажа (известные форматы, ≤2 одинаковых подряд, покрытие), ASR-мусор в субтитрах, подключённость product b-roll, громкость + истинный пик, а также проверка **HDR-источник → тонмаппинг** с извлечённым кадром для ручного контроля цвета. Код выхода = количество FAIL.

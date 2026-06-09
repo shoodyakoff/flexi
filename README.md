@@ -1,106 +1,106 @@
 # Flexi
 
-**An agent-driven pipeline for producing vertical short-form video** (9:16,
-1080×1920, 30fps) — subtitles, TTS voiceover, b-roll assembly, talking-head
-cleanup, ref-style montage, combinatorial reels, and a 3-strip format. You drive
-it from the command line (and it's designed to be driven by a coding agent like
-Claude Code, which self-onboards from `CLAUDE.md`).
+**Агентный пайплайн для создания вертикальных коротких видео** (9:16,
+1080×1920, 30fps) — субтитры, закадровая озвучка через TTS, сборка b-roll, чистка
+talking-head, монтаж в стиле ref-style, комбинаторные рилсы и формат 3-strip. Ты управляешь
+им из командной строки (и он рассчитан на управление кодинг-агентом вроде
+Claude Code, который сам онбордится из `CLAUDE.md`).
 
-> Flexi is the reusable engine. It ships with **no media** — bring your own
-> footage, music, and SFX. Fonts are bundled under open licenses.
+> Flexi — это переиспользуемый движок. Он поставляется **без медиа** — приноси свои
+> материалы, музыку и SFX. Шрифты идут в комплекте под открытыми лицензиями.
 
 **🇷🇺 Не разработчик / по-русски?** Открой **[НАЧНИ_ЗДЕСЬ.md](НАЧНИ_ЗДЕСЬ.md)** —
 пошаговый онбординг простыми словами. Можно вообще ничего не настраивать руками:
 попроси агента «установи всё, что нужно» — он сам поставит и скажет, когда
 готово. Проверка готовности: `make check` (или `python3 check_setup.py`).
 
-## Pipelines
+## Пайплайны
 
-| Pipeline | What it does |
+| Пайплайн | Что делает |
 |---|---|
-| **Standard / library** | Ready hook + TTS voiceover + auto/manual b-roll + CTA + subtitles + music, from a small `VideoScript` JSON. |
-| **Talking-head clean** | Clean raw talking-head footage: silence/retake removal, HDR→SDR, vertical, optional subtitles. |
-| **Ref-style directed** | A semantic director maps a transcript to 5 visual formats with product b-roll, burned captions, music. |
-| **Reel Matrix** | Mix interchangeable hook × tip-order × cta blocks into many unique videos. |
-| **3-strip** | Three horizontal clips stacked in one 9:16 frame, asynchronous cascade. |
+| **Standard / library** | Готовый хук + закадровая озвучка через TTS + авто/ручной b-roll + CTA + субтитры + музыка, из небольшого `VideoScript` JSON. |
+| **Talking-head clean** | Чистит сырой материал talking-head: удаление тишины/дублей, HDR→SDR, вертикальный формат, опциональные субтитры. |
+| **Ref-style directed** | Семантический режиссёр раскладывает транскрипт по 5 визуальным форматам с продуктовым b-roll, вшитыми подписями и музыкой. |
+| **Reel Matrix** | Смешивает взаимозаменяемые блоки хук × порядок-советов × cta во множество уникальных видео. |
+| **3-strip** | Три горизонтальных клипа, сложенных в один кадр 9:16, асинхронным каскадом. |
 
-Plus a **QA layer** that gates finished videos (spec, dead air, HDR wash,
-captions, loudness). See `docs/modes.md` for how the stages chain.
+Плюс **слой QA**, который проверяет готовые видео (соответствие спецификации, мёртвый эфир, размытие HDR,
+подписи, громкость). Смотри `docs/modes.md`, как стадии связываются между собой.
 
-## Requirements
+## Требования
 
-- **ffmpeg** (with libass) and **ffprobe**
+- **ffmpeg** (с libass) и **ffprobe**
 - **Python** ≥ 3.10
-- **ElevenLabs API key** — only for TTS voiceover ([elevenlabs.io](https://elevenlabs.io))
-- **zsh** — only for the 3-strip pipeline
+- **Ключ API ElevenLabs** — только для закадровой озвучки через TTS ([elevenlabs.io](https://elevenlabs.io))
+- **zsh** — только для пайплайна 3-strip
 
-## Install
+## Установка
 
 ```bash
 git clone <your-fork-url> flexi && cd flexi
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-cp .env.example .env          # then add your ELEVENLABS_API_KEY
-.venv/bin/python -m pytest    # integration tests needing media auto-skip
-python3 check_setup.py        # readiness check (RU): deps, media, what you can build
+cp .env.example .env          # затем впиши свой ELEVENLABS_API_KEY
+.venv/bin/python -m pytest    # интеграционные тесты, которым нужны медиа, авто-пропускаются
+python3 check_setup.py        # проверка готовности (по-русски): зависимости, медиа, что можно собрать
 ```
 
-## Usage
+## Использование
 
 ```bash
-# Standard / library — build a reel from a VideoScript JSON
+# Standard / library — собрать рилс из VideoScript JSON
 .venv/bin/python -m src.cli build scripts/example.json
 .venv/bin/python -m src.cli validate scripts/example.json
-.venv/bin/python -m src.cli --help          # all subcommands
+.venv/bin/python -m src.cli --help          # все подкоманды
 
 # Talking-head clean / Ref-style / Reel Matrix
 .venv/bin/python pipelines/render_talking_head_dynamic_clean.py --help
 .venv/bin/python pipelines/render_ref_style_directed.py --help
 .venv/bin/python pipelines/reel_matrix.py --help
 
-# 3-strip (config-driven)
+# 3-strip (управляется конфигом)
 cp pipelines/three_strip/episodes/example.conf pipelines/three_strip/episodes/myday.conf
 zsh pipelines/three_strip/build_3strip.zsh pipelines/three_strip/episodes/myday.conf
 ```
 
-Or with the Makefile: `make test`, `make validate SCRIPT=…`, `make build SCRIPT=…`.
+Или через Makefile: `make test`, `make validate SCRIPT=…`, `make build SCRIPT=…`.
 
-> `scripts/example.json` shows the `VideoScript` format. `validate` and `build` resolve `hook_id` / `cta_id` / b-roll from `assets/*/_meta.json`, so register your own hook / CTA / b-roll clips there first (see `assets/README.md`).
+> `scripts/example.json` показывает формат `VideoScript`. `validate` и `build` разрешают `hook_id` / `cta_id` / b-roll из `assets/*/_meta.json`, поэтому сначала зарегистрируй там свои клипы хука / CTA / b-roll (см. `assets/README.md`).
 
-## Configuration
+## Конфигурация
 
-`config.yaml` is the single source of truth for resolution, codecs, audio
-levels, TTS model/speed, subtitle styles, rhythm, b-roll rotation, and the hook
-montage. Edit behavior there rather than hardcoding.
+`config.yaml` — единственный источник истины для разрешения, кодеков, уровней
+звука, модели/скорости TTS, стилей субтитров, ритма, ротации b-roll и
+монтажа хука. Меняй поведение там, а не хардкодом.
 
-Add your media under `assets/` (see `assets/README.md` for the layout). Fonts in
-`assets/fonts/` are bundled (open-licensed); the defaults render subtitles out of
-the box. To use commercial fonts you own (e.g. Gilroy, Druk Wide), drop them in
-and point `config.yaml` at the family name — see `assets/fonts/README.md`.
+Добавляй свои медиа в `assets/` (см. `assets/README.md` про раскладку). Шрифты в
+`assets/fonts/` идут в комплекте (под открытыми лицензиями); дефолты рендерят субтитры из
+коробки. Чтобы использовать коммерческие шрифты, которыми ты владеешь (например, Gilroy, Druk Wide), положи их
+сюда и укажи в `config.yaml` имя семейства — см. `assets/fonts/README.md`.
 
-## Driving it with an agent
+## Управление через агента
 
-This repo is structured to self-onboard a coding agent: `CLAUDE.md` is read on
-launch and indexes every pipeline, setup step, and operating rule; `AGENTS.md`
-holds the operating contract; and `.claude/skills/video-montage/` is a
-step-by-step ffmpeg/TTS/subtitle skill. Clone, open in your agent, and ask it to
-build a reel.
+Этот репозиторий устроен так, чтобы кодинг-агент сам онбордился: `CLAUDE.md` читается при
+запуске и индексирует каждый пайплайн, шаг настройки и правило работы; `AGENTS.md`
+содержит рабочий контракт; а `.claude/skills/video-montage/` — это
+пошаговый навык по ffmpeg/TTS/субтитрам. Клонируй, открой в своём агенте и попроси его
+собрать рилс.
 
-## Project structure
+## Структура проекта
 
 ```
-src/         shared engine library + `src.cli`
-pipelines/   every pipeline entry point (incl. three_strip/)
-docs/        modes.md + agentic-mode guides
-tests/       pytest suite (integration tests auto-skip without media)
-assets/      bundled fonts + your media (you supply)
-raw/         your drop inbox — agent sorts it into assets/ + scripts/
-scripts/     VideoScript JSON inputs (example.json)
-config.yaml  all render/TTS/subtitle/audio knobs
-check_setup.py · НАЧНИ_ЗДЕСЬ.md  readiness check + RU onboarding (human)
+src/         общая библиотека движка + `src.cli`
+pipelines/   точки входа всех пайплайнов (вкл. three_strip/)
+docs/        modes.md + руководства по управлению через агента
+tests/       набор тестов pytest (интеграционные авто-пропускаются без медиа)
+assets/      встроенные шрифты + твои медиа (приносишь сам)
+raw/         твой инбокс — агент раскладывает его в assets/ + scripts/
+scripts/     входные VideoScript JSON (example.json)
+config.yaml  все настройки рендера/TTS/субтитров/звука
+check_setup.py · НАЧНИ_ЗДЕСЬ.md  проверка готовности + онбординг для человека (по-русски)
 ```
 
-## License
+## Лицензия
 
-MIT — see [LICENSE](LICENSE). Bundled fonts are under the SIL Open Font License
-(see `assets/fonts/`).
+MIT — см. [LICENSE](LICENSE). Шрифты в комплекте — под лицензией SIL Open Font License
+(см. `assets/fonts/`).

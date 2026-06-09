@@ -1,10 +1,10 @@
-# Fonts
+# Шрифты
 
-All fonts bundled here are under open licenses that permit redistribution.
-`config.yaml` defaults reference **Onest** (body) and **Bebas Neue Cyrillic**
-(accent) so the subtitle/heading pipelines render out of the box.
+Все шрифты в этой папке распространяются под открытыми лицензиями, разрешающими повторное распространение.
+Значения по умолчанию в `config.yaml` ссылаются на **Onest** (основной) и **Bebas Neue Cyrillic**
+(акцентный), поэтому пайплайны субтитров/заголовков рендерятся из коробки.
 
-| family | file | license |
+| семейство | файл | лицензия |
 |---|---|---|
 | Onest | `Onest-Variable.ttf` | SIL OFL 1.1 (`OFL.txt`) |
 | Bebas Neue Cyrillic | `BebasNeue-Cyrillic.ttf` | SIL OFL 1.1 (`BebasNeue-Cyrillic-OFL.txt`) |
@@ -13,12 +13,12 @@ All fonts bundled here are under open licenses that permit redistribution.
 | Poiret One | `PoiretOne-Regular.ttf` | SIL OFL 1.1 (`PoiretOne-OFL.txt`) |
 | Ruslan Display | `RuslanDisplay-Regular.ttf` | SIL OFL 1.1 (`RuslanDisplay-OFL.txt`) |
 
-## Want a different look (e.g. Gilroy / Druk Wide)?
+## Нужен другой вид (например, Gilroy / Druk Wide)?
 
-The original project used the commercial fonts **Gilroy** (body) and **Druk Wide
-Cyr** (accent). Those are **not redistributable**, so they are intentionally not
-included. If you own a license, drop the `.ttf` into this folder and point
-`config.yaml` at the family name:
+В исходном проекте использовались коммерческие шрифты **Gilroy** (основной) и **Druk Wide
+Cyr** (акцентный). Их **нельзя распространять**, поэтому они намеренно не
+включены. Если у вас есть лицензия, положите `.ttf` в эту папку и укажите
+в `config.yaml` имя семейства:
 
 ```yaml
 fonts:
@@ -26,5 +26,5 @@ fonts:
   accent_family: "Druk Wide Cyr"
 ```
 
-Fonts resolve by family-name token against the files in this folder, so any
-`.ttf`/`.otf` you add becomes usable by its family name immediately.
+Шрифты определяются по токену имени семейства среди файлов в этой папке, поэтому любой
+`.ttf`/`.otf`, который вы добавите, сразу становится доступен по имени семейства.

@@ -1,28 +1,28 @@
-# assets/
+# assets/ — медиа и шрифты
 
-Engine assets. **Media is not shipped** — you supply your own footage, music,
-and sound effects. Only text/config assets are tracked in git (fonts under an
-open license, the pronunciation map, and the overlay keyword map). The media
-folders below ship as empty skeletons (`.gitkeep`) so you know where to drop
-files; anything you add is git-ignored automatically.
+Ресурсы движка. **Медиа не поставляется** — вы добавляете свой материал, музыку
+и звуковые эффекты сами. В git хранятся только текстовые/конфигурационные ресурсы
+(шрифты под открытой лицензией, карта произношения и карта ключевых слов для оверлеев).
+Папки с медиа поставляются как пустые заготовки (`.gitkeep`), чтобы вы знали, куда складывать
+файлы; всё, что вы добавите, автоматически попадает в git-ignore.
 
-**Easiest path: drop everything into `raw/`** (the inbox at the repo root) and
-tell the agent what to make — it sorts each file into the folders below and
-re-indexes. See `CLAUDE.md` → "The `raw/` inbox". Or place files directly if you
-already know where they go.
+**Самый простой путь: складывайте всё в `raw/`** (инбокс в корне репозитория) и
+скажите агенту, что нужно сделать — он разложит каждый файл по папкам ниже и
+переиндексирует. См. `CLAUDE.md` → "The `raw/` inbox". Или кладите файлы напрямую, если
+вы уже знаете, куда они идут.
 
-| folder | what goes here | tracked? |
+| папка | что сюда кладётся | в git? |
 |---|---|---|
-| `fonts/` | subtitle/heading fonts (open-licensed set bundled — see `fonts/README.md`) | ✅ yes |
-| `pronunciation.yaml` | word → phonetic overrides for TTS | ✅ yes |
-| `hook_overlays/_meta.json` | overlay-icon keyword map (the picker scores against this) | ✅ yes |
-| `hook_overlays/*.png` | overlay icon glyphs | ⬜ you supply |
-| `hooks/` · `ctas/` | ready hook / CTA clips (`*.mp4`/`*.mov`) | ⬜ you supply |
-| `broll/` · `broll_brand/` · `broll_ingest/` | b-roll library + product demo clips | ⬜ you supply |
-| `music/` | background music tracks (`config.yaml` → `edit_profile.music_file`) | ⬜ you supply |
-| `sounds/` | SFX (riser, swoosh — referenced in `config.yaml`) | ⬜ you supply |
-| `talking_head_sources/` | raw talking-head footage for the clean/ref-style pipelines | ⬜ you supply |
+| `fonts/` | шрифты для субтитров/заголовков (комплект под открытой лицензией в комплекте — см. `fonts/README.md`) | ✅ да |
+| `pronunciation.yaml` | слово → фонетические замены для TTS | ✅ да |
+| `hook_overlays/_meta.json` | карта ключевых слов для иконок-оверлеев (по ней подбирается оценка) | ✅ да |
+| `hook_overlays/*.png` | глифы иконок-оверлеев | ⬜ вы добавляете |
+| `hooks/` · `ctas/` | готовые клипы хука / CTA (`*.mp4`/`*.mov`) | ⬜ вы добавляете |
+| `broll/` · `broll_brand/` · `broll_ingest/` | библиотека b-roll + клипы демонстрации продукта | ⬜ вы добавляете |
+| `music/` | фоновые музыкальные треки (`config.yaml` → `edit_profile.music_file`) | ⬜ вы добавляете |
+| `sounds/` | SFX (riser, swoosh — указываются в `config.yaml`) | ⬜ вы добавляете |
+| `talking_head_sources/` | исходный talking-head материал для пайплайнов clean/ref-style | ⬜ вы добавляете |
 
-Use only media you have the rights to. Fonts referenced by `config.yaml` resolve
-by family name against files in `fonts/`; the defaults map to the bundled
-open-licensed fonts so subtitles render out of the box.
+Используйте только то медиа, на которое у вас есть права. Шрифты, указанные в `config.yaml`,
+определяются по имени семейства среди файлов в `fonts/`; значения по умолчанию ссылаются на
+встроенные шрифты под открытой лицензией, поэтому субтитры рендерятся из коробки.

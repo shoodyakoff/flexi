@@ -1,29 +1,29 @@
-# Project Agentic Mode
+# Агентный режим проекта
 
-This repository uses a local, project-scoped problem-first workflow for work where "done" depends on the user's original intent, not only a checklist or passing tests. The workflow is intentionally lighter than a global Codex rule so quick edits stay quick.
+В этом репозитории используется локальный, привязанный к проекту рабочий процесс по принципу «проблема прежде всего» — для задач, где понятие «готово» зависит от исходного намерения пользователя, а не только от чек-листа или прохождения тестов. Этот процесс намеренно легче, чем глобальное правило Codex, чтобы быстрые правки оставались быстрыми.
 
-## When To Use It
+## Когда использовать
 
-Use the full workflow for:
+Используйте полный процесс для:
 
-- product, design, editorial, or technical decisions with ambiguous behavior;
-- multi-step implementation, pipeline, UI, content, or automation changes;
-- data, artifact, API, rendering, or user-facing contract changes;
-- tasks where the request names "agentic mode", "problem-first", "исходная боль", or asks to preserve the original intent;
-- anything where the user may reject a technically correct implementation because it missed the real problem.
+- продуктовых, дизайнерских, редакторских или технических решений с неоднозначным поведением;
+- многошаговых изменений реализации, пайплайна, интерфейса, контента или автоматизации;
+- изменений данных, артефактов, API, рендера или контрактов, видимых пользователю;
+- задач, где запрос упоминает «agentic mode», «problem-first», «исходная боль» или просит сохранить исходное намерение;
+- всего, где пользователь может отвергнуть технически верную реализацию, потому что она упустила настоящую проблему.
 
-Use normal direct execution for:
+Используйте обычное прямое выполнение для:
 
-- one-line fixes;
-- typo edits;
-- mechanical renames;
-- pure information questions;
-- commands the user explicitly asks to run;
-- narrow test or lint fixes where the intended outcome is already concrete.
+- однострочных правок;
+- исправления опечаток;
+- механических переименований;
+- чисто информационных вопросов;
+- команд, которые пользователь явно просит выполнить;
+- узких правок тестов или линтера, где желаемый результат уже конкретен.
 
-## Session Folder
+## Папка сессии
 
-Each non-trivial task gets a local audit trail:
+Каждая нетривиальная задача получает локальный аудит-след:
 
 ```text
 .codex/session/<taskId>/
@@ -39,27 +39,27 @@ Each non-trivial task gets a local audit trail:
 `-- decision.md
 ```
 
-The `.sha256` sidecar is used instead of putting the hash inside `00_ORIGINAL_PROBLEM.md`, because self-hashing a file that contains its own hash is not stable.
+Файл-спутник `.sha256` используется вместо хранения хеша внутри `00_ORIGINAL_PROBLEM.md`, потому что самохеширование файла, который содержит собственный хеш, нестабильно.
 
-## Phase Rules
+## Правила по фазам
 
-1. **Problem Freeze**: write `00_ORIGINAL_PROBLEM.md` from the user's raw request, extracted pain, desired outcome, success signals, and anti-goals. Then compute `00_ORIGINAL_PROBLEM.sha256`. Do not edit the problem file after hashing.
-2. **Context / Research Gate**: collect only context that can change the chosen approach, but do not skip the three research lanes below. This phase is a gate: do not write hypotheses, a spec, or code until `01_CONTEXT.md` records the findings or explicitly states why a lane was impossible or irrelevant for this task.
-   - **Docs and Past Problems**: read the current repository docs that govern the affected area, `AGENTS.md`, relevant plans, project memory, previous `.codex/session/*` records, `attempts.log`, and similar failures or fixes. Capture what was already tried, what passed or failed intent verification, and what constraints still apply.
-   - **Current Code Reality**: inspect the current implementation, contracts, tests, source data, generated artifacts, CLI/API paths, UI surfaces, scripts, renders, or content outputs that can explain the problem. Map the actual flow before proposing a solution.
-   - **External Prior Art**: search current external sources when the task is not purely mechanical or private-only. Prefer official documentation for dependencies and APIs, then GitHub issues/discussions, Reddit, and professional community posts for how similar problems are solved in practice. Record source links, search terms when useful, what applies to this repo, and what does not. If network access is blocked or the task is too sensitive for web search, state that explicitly and continue with local evidence.
-3. **Hypotheses**: propose at least three mechanism-distinct approaches. Include failure modes and cost, then choose one.
-4. **Spec**: map every spec item back to an original-problem success signal. Name affected domains, contracts, files, commands, UI surfaces, artifacts, docs, and tests.
-5. **Implementation**: build the approved spec in small vertical slices that respect the repository's existing boundaries, local instructions, and established patterns.
-6. **Spec Verification**: prove the spec was implemented with commands, tests, screenshots, rendered output checks, artifact checks, or file checks. For UI, report, content, render, or owner-facing behavior, inspect the visible output and compare it with the request.
-7. **Intent Verification**: verify against `00_ORIGINAL_PROBLEM.md`, not just `03_SPEC.md`. For important tasks, use an isolated reviewer/subagent that receives only the original problem, implementation summary, and result artifacts.
-8. **Decision Gate**: `PASS` finishes. `FAIL` appends a dated note to `attempts.log` and loops back to context or hypotheses.
+1. **Problem Freeze**: запишите `00_ORIGINAL_PROBLEM.md` на основе исходного запроса пользователя, выделенной боли, желаемого результата, сигналов успеха и анти-целей. Затем вычислите `00_ORIGINAL_PROBLEM.sha256`. Не редактируйте файл с проблемой после хеширования.
+2. **Context / Research Gate**: собирайте только тот контекст, который может изменить выбранный подход, но не пропускайте три направления исследования ниже. Эта фаза — шлюз: не пишите гипотезы, спецификацию или код, пока `01_CONTEXT.md` не зафиксирует находки или явно не укажет, почему направление было невозможным или нерелевантным для этой задачи.
+   - **Docs and Past Problems**: прочитайте текущую документацию репозитория, которая управляет затронутой областью, `AGENTS.md`, релевантные планы, память проекта, предыдущие записи `.codex/session/*`, `attempts.log` и похожие сбои или исправления. Зафиксируйте, что уже пробовали, что прошло или провалило проверку намерения и какие ограничения всё ещё действуют.
+   - **Current Code Reality**: изучите текущую реализацию, контракты, тесты, исходные данные, сгенерированные артефакты, пути CLI/API, поверхности интерфейса, скрипты, рендеры или контентные результаты, которые могут объяснить проблему. Составьте карту реального потока, прежде чем предлагать решение.
+   - **External Prior Art**: ищите актуальные внешние источники, когда задача не является чисто механической или сугубо приватной. Предпочитайте официальную документацию по зависимостям и API, затем issues/обсуждения на GitHub, Reddit и посты профессиональных сообществ о том, как похожие проблемы решают на практике. Записывайте ссылки на источники, поисковые запросы, когда это полезно, что применимо к этому репозиторию, а что нет. Если доступ к сети заблокирован или задача слишком чувствительна для веб-поиска, укажите это явно и продолжайте с локальными данными.
+3. **Hypotheses**: предложите как минимум три подхода, различающихся по механизму. Включите режимы отказа и стоимость, затем выберите один.
+4. **Spec**: свяжите каждый пункт спецификации обратно с сигналом успеха из исходной проблемы. Назовите затронутые области, контракты, файлы, команды, поверхности интерфейса, артефакты, документацию и тесты.
+5. **Implementation**: реализуйте утверждённую спецификацию небольшими вертикальными срезами, которые уважают существующие границы репозитория, локальные инструкции и устоявшиеся паттерны.
+6. **Spec Verification**: докажите, что спецификация реализована — командами, тестами, скриншотами, проверками отрендеренного вывода, проверками артефактов или файлов. Для интерфейса, отчётов, контента, рендера или поведения, видимого владельцу, изучите видимый результат и сравните его с запросом.
+7. **Intent Verification**: проверяйте относительно `00_ORIGINAL_PROBLEM.md`, а не только `03_SPEC.md`. Для важных задач используйте изолированного рецензента/субагента, который получает только исходную проблему, краткое описание реализации и итоговые артефакты.
+8. **Decision Gate**: `PASS` завершает работу. `FAIL` добавляет датированную заметку в `attempts.log` и возвращает к контексту или гипотезам.
 
-## Research Gate Detail
+## Детали шлюза исследования
 
-The research gate should be scaled to the size and risk of the task, but its structure is mandatory for problem-first work. A small label bug may need three concise bullets. A multi-step product, pipeline, UI, or rendering task may need several pages of notes, source links, and reproduction evidence.
+Шлюз исследования следует масштабировать под размер и риск задачи, но его структура обязательна для работы по принципу «проблема прежде всего». Мелкий баг с подписью может потребовать трёх кратких пунктов. Многошаговая продуктовая, пайплайновая, интерфейсная или рендер-задача может потребовать нескольких страниц заметок, ссылок на источники и доказательств воспроизведения.
 
-Use this shape inside `01_CONTEXT.md`:
+Используйте эту форму внутри `01_CONTEXT.md`:
 
 ```md
 # Context
@@ -85,19 +85,19 @@ Use this shape inside `01_CONTEXT.md`:
 - Only questions that can change the approach:
 ```
 
-External prior art is not a license to import complexity. It is there to avoid missing current API behavior, established library patterns, known failure modes, and common UX, content, or operational solutions. Repository boundaries and the original user pain still win.
+Внешний опыт (external prior art) — не лицензия на привнесение сложности. Он нужен, чтобы не упустить актуальное поведение API, устоявшиеся паттерны библиотек, известные режимы отказа и распространённые решения по UX, контенту или эксплуатации. Границы репозитория и исходная боль пользователя всё равно важнее.
 
-After the research gate, ask the user only for clarifications that can change the approach. If the next step is obvious, proceed to hypotheses.
+После шлюза исследования спрашивайте у пользователя только те уточнения, которые могут изменить подход. Если следующий шаг очевиден, переходите к гипотезам.
 
-## Project Calibration
+## Калибровка под проект
 
-The first setup session can be:
+Первая установочная сессия может быть:
 
 ```text
 .codex/session/000-agentic-mode-integration/
 ```
 
-Do not reuse that session for product work. Future tasks should create focused names such as:
+Не переиспользуйте эту сессию для продуктовой работы. Будущие задачи должны создавать сфокусированные имена, например:
 
 ```text
 .codex/session/001-render-contract-fix/
@@ -105,17 +105,17 @@ Do not reuse that session for product work. Future tasks should create focused n
 .codex/session/003-content-pipeline-guardrail/
 ```
 
-The workflow is a tool, not a cage. If a phase produces no new information, state that in the relevant session file and keep moving. If tests pass but intent verification fails, the task is not done: update context and hypotheses, then choose the next attempt.
+Этот процесс — инструмент, а не клетка. Если фаза не даёт новой информации, укажите это в соответствующем файле сессии и двигайтесь дальше. Если тесты проходят, но проверка намерения провалена, задача не готова: обновите контекст и гипотезы, затем выберите следующую попытку.
 
-When a task fails intent verification, the next attempt must begin by updating the research gate, not by patching from memory. Check whether the failure came from a missed past problem, a wrong code map, or missing external prior art, then revise hypotheses.
+Когда задача проваливает проверку намерения, следующая попытка должна начинаться с обновления шлюза исследования, а не с правок по памяти. Проверьте, пришёл ли сбой из упущенной прошлой проблемы, неверной карты кода или отсутствующего внешнего опыта, затем пересмотрите гипотезы.
 
-## Completion Rule
+## Правило завершения
 
-For problem-first tasks, completion requires all of the following:
+Для задач по принципу «проблема прежде всего» завершение требует всего перечисленного:
 
-- the original problem is frozen and hashed;
-- `01_CONTEXT.md` includes Docs and Past Problems, Current Code Reality, and External Prior Art findings, or an explicit reason a lane could not be completed;
-- implementation evidence is recorded in `05_SPEC_VERIFICATION.md`;
-- `06_INTENT_VERIFICATION.md` explicitly checks the original success signals and anti-goals;
-- `decision.md` records `PASS` or `FAIL`;
-- the final response states whether the original user pain is solved, not only which files changed.
+- исходная проблема заморожена и хеширована;
+- `01_CONTEXT.md` включает находки по Docs and Past Problems, Current Code Reality и External Prior Art или явную причину, почему направление не удалось завершить;
+- доказательства реализации записаны в `05_SPEC_VERIFICATION.md`;
+- `06_INTENT_VERIFICATION.md` явно проверяет исходные сигналы успеха и анти-цели;
+- `decision.md` фиксирует `PASS` или `FAIL`;
+- финальный ответ указывает, решена ли исходная боль пользователя, а не только какие файлы изменились.

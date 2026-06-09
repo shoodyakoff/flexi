@@ -1,191 +1,191 @@
-# Video creation modes
+# Режимы создания видео
 
-This is the working contract for choosing the right reel workflow.
+Это рабочий контракт для выбора правильного процесса сборки рилса.
 
-## Content modes
+## Контентные режимы
 
-A reel falls into one of a few editorial shapes. These are conceptual — the
-inputs are plain `VideoScript` JSON in `scripts/`:
+Рилс относится к одной из нескольких редакторских форм. Это концептуальные
+понятия — на входе обычный `VideoScript` JSON в `scripts/`:
 
-1. **`generated_video`** — AI reel "под ключ": hook + body voiceover + CTA, with
-   `hook_asset_id`, `cta_asset_id`, and an optional product insert.
-2. **`talking_head`** — the creator speaks on camera (one or more raw takes) and
-   the footage is cleaned/edited into a vertical reel.
-3. **`explain_with_images`** — self-shot explainer where the creator speaks and
-   uses a laptop, screen, screenshots, or simple images as visual anchors. Do
-   not apply TTS pause markup for this one.
+1. **`generated_video`** — AI-рилс «под ключ»: хук + озвучка основной части + CTA, с
+   `hook_asset_id`, `cta_asset_id` и необязательной вставкой продукта.
+2. **`talking_head`** — автор говорит на камеру (один или несколько сырых дублей), и
+   этот материал чистится и монтируется в вертикальное видео.
+3. **`explain_with_images`** — самостоятельно снятое объяснение, где автор говорит и
+   использует ноутбук, экран, скриншоты или простые картинки как визуальные опоры. Не
+   применяй разметку пауз TTS для этого режима.
 
-## Production routes
+## Производственные маршруты
 
-When asked to create a reel, choose one route before writing or building.
+Когда тебя просят создать рилс, выбери один маршрут до написания или сборки.
 
-### Standard mode
+### Стандартный режим (standard mode)
 
-`standard mode` is the default production contract for commands like:
+`standard mode` — это режим производства по умолчанию для команд вроде:
 
 > собери 10 роликов в стандартном режиме с 11 по 20
 
-Use it when the user has already prepared the `VideoScript` JSON in `scripts/` and dropped the needed raw media into the asset folders.
+Используй его, когда пользователь уже подготовил `VideoScript` JSON в `scripts/` и сложил нужный сырой материал в папки с ассетами.
 
-Standard mode means:
+Стандартный режим означает:
 
-- Content mode: `generated_video`.
-- Production route: `library_auto`.
-- TTS preset: `v2`.
-- ElevenLabs model: `eleven_multilingual_v2`.
-- ElevenLabs speed: `1.15`.
-- TTS markup dialect: `v2`.
-- Language: `ru`.
-- Pronunciation dictionary: enabled from `config.yaml`.
-- Whisper alignment/transcription: `large-v3`.
-- Subtitle style: `editorial_pop`.
-- Rhythm profile: `provocative_soft`.
-- Look profile: `punchy`, with `punchy_bright` for dark hooks.
-- B-roll strategy: `auto`.
-- Music: configured profile music, currently `assets/music/provocative.mp3`.
-- Product insert: add your product demo clip from `assets/broll_brand/` when the script calls for a product/demo moment.
+- Контентный режим: `generated_video`.
+- Производственный маршрут: `library_auto`.
+- Пресет TTS: `v2`.
+- Модель ElevenLabs: `eleven_multilingual_v2`.
+- Скорость ElevenLabs: `1.15`.
+- Диалект разметки TTS: `v2`.
+- Язык: `ru`.
+- Словарь произношения: включён из `config.yaml`.
+- Выравнивание/транскрипция Whisper: `large-v3`.
+- Стиль субтитров: `editorial_pop`.
+- Профиль ритма: `provocative_soft`.
+- Профиль картинки: `punchy`, с `punchy_bright` для тёмных хуков.
+- Стратегия b-roll: `auto`.
+- Музыка: музыка из настроенного профиля, сейчас `assets/music/provocative.mp3`.
+- Вставка продукта: добавь клип с демо продукта из `assets/broll_brand/`, когда сценарий требует момента с продуктом/демо.
 
-Before rendering in standard mode, the agent must complete the prep work:
+Перед рендером в стандартном режиме агент должен выполнить подготовительную работу:
 
-1. Read `VOICEOVER_STYLE.md` and make sure `voiceover_text` uses `{{pause:...}}` and `{{slow}}...{{/slow}}`.
-2. Prepare or read the requested `VideoScript` JSON files in `scripts/`.
-3. Inspect new media files in `assets/hooks`, `assets/ctas`, `assets/broll`, and relevant ingest folders.
-4. Match media files to reel numbers by filename first, then by creation time and visible/audio content if needed.
-5. Rename matched files into the project asset convention instead of building from ad-hoc filenames.
-6. Update asset metadata for hooks, CTAs, and b-roll.
-7. For b-roll, fill the required annotation fields: `shot_scale`, `subject_kind`, `energy`, `scene_group`.
-8. Pick or verify `hook_asset_id` and `cta_asset_id` in each script.
-9. Write each `VideoScript` to `scripts/{slug}.json`.
-10. Validate each exported script before rendering.
-11. Build the videos with the default config, without asking again for voice speed, subtitle style, TTS model, music, or b-roll strategy.
-12. After rendering, report the final paths and any failed builds.
+1. Прочитай `VOICEOVER_STYLE.md` и убедись, что `voiceover_text` использует `{{pause:...}}` и `{{slow}}...{{/slow}}`.
+2. Подготовь или прочитай запрошенные файлы `VideoScript` JSON в `scripts/`.
+3. Осмотри новые медиафайлы в `assets/hooks`, `assets/ctas`, `assets/broll` и соответствующих папках для загрузки.
+4. Сопоставь медиафайлы с номерами рилсов сначала по имени файла, затем по времени создания и видимому/звуковому содержимому, если нужно.
+5. Переименуй сопоставленные файлы в принятую в проекте конвенцию ассетов вместо сборки из произвольных имён файлов.
+6. Обнови метаданные ассетов для хуков, CTA и b-roll.
+7. Для b-roll заполни обязательные поля аннотаций: `shot_scale`, `subject_kind`, `energy`, `scene_group`.
+8. Выбери или проверь `hook_asset_id` и `cta_asset_id` в каждом сценарии.
+9. Запиши каждый `VideoScript` в `scripts/{slug}.json`.
+10. Проверь каждый экспортированный сценарий перед рендером.
+11. Собери видео с конфигурацией по умолчанию, не спрашивая повторно про скорость голоса, стиль субтитров, модель TTS, музыку или стратегию b-roll.
+12. После рендера сообщи итоговые пути и любые неудавшиеся сборки.
 
-Ask the user only when matching is ambiguous or a required asset is missing. For example, ask if two CTA files both look like reel 14, or if reel 17 has no matching CTA/hook footage.
+Спрашивай пользователя только тогда, когда сопоставление неоднозначно или отсутствует обязательный ассет. Например, спроси, если два файла CTA оба похожи на рилс 14, или если у рилса 17 нет подходящего материала CTA/хука.
 
-### 1. Library auto reel
+### 1. Авторилс из библиотеки (library auto reel)
 
-Use when the user wants a standard product / advice reel assembled from existing assets.
+Используй, когда пользователь хочет стандартный рилс про продукт / совет, собранный из существующих ассетов.
 
-- Script format: `VideoScript`.
-- Hook and CTA: existing assets from `assets/hooks` and `assets/ctas`.
-- Body: ElevenLabs voiceover from `voiceover_text`.
-- B-roll: `broll_strategy: "auto"` or `"by_tags"`.
-- Product insert: use `product_insert` when the product/demo appears.
-- Output: `scripts/{slug}.json`, then `python -m src.cli build scripts/{slug}.json`.
+- Формат сценария: `VideoScript`.
+- Хук и CTA: существующие ассеты из `assets/hooks` и `assets/ctas`.
+- Основная часть: озвучка ElevenLabs из `voiceover_text`.
+- B-roll: `broll_strategy: "auto"` или `"by_tags"`.
+- Вставка продукта: используй `product_insert`, когда появляется продукт/демо.
+- Вывод: `scripts/{slug}.json`, затем `python -m src.cli build scripts/{slug}.json`.
 
-Recommended default.
+Рекомендуемый вариант по умолчанию.
 
-### 2. Library manual reel
+### 2. Ручной рилс из библиотеки (library manual reel)
 
-Use when the user wants the same renderer, but specific lower-row / body clips in a precise order.
+Используй, когда пользователь хочет тот же рендерер, но конкретные клипы нижнего ряда / основной части в точном порядке.
 
-- Script format: `VideoScript`.
-- Set `broll_strategy: "manual"`.
-- Fill `broll_ids_override` with the chosen clip ids.
-- Good for: testing pacing, forcing a visual sequence, repeating a proven composition.
-- Tradeoff: less automatic variety and more responsibility for clip order.
+- Формат сценария: `VideoScript`.
+- Установи `broll_strategy: "manual"`.
+- Заполни `broll_ids_override` выбранными id клипов.
+- Хорошо подходит для: проверки темпа, принудительной визуальной последовательности, повтора проверенной композиции.
+- Компромисс: меньше автоматического разнообразия и больше ответственности за порядок клипов.
 
-### 3. Custom graphics reel
+### 3. Рилс с кастомной графикой (custom graphics reel)
 
-Use when the reel needs generated visuals, editorial graphics, screenshots, split-screen, cartoon panels, or a designed lower visual row that the b-roll library cannot express.
+Используй, когда рилсу нужна сгенерированная графика, редакторские визуалы, скриншоты, разделённый экран, мультяшные панели или продуманный нижний визуальный ряд, который библиотека b-roll не может выразить.
 
-- Preferred implementation: HyperFrames/HTML video composition for graphic-heavy pieces.
-- Good for: “make the lower row with generated video/graphics”, diagrams, UI/product walkthroughs, memes, visual metaphors.
-- Output: a rendered MP4 from the custom composition, optionally combined with the standard hook/body/CTA renderer later.
-- Tradeoff: more design freedom, but more bespoke build/QA per episode.
+- Предпочтительная реализация: композиция видео HyperFrames/HTML для насыщенных графикой кусков.
+- Хорошо подходит для: «сделать нижний ряд со сгенерированным видео/графикой», диаграмм, разборов UI/продукта, мемов, визуальных метафор.
+- Вывод: отрендеренный MP4 из кастомной композиции, при необходимости позже объединённый со стандартным рендерером хука/основной части/CTA.
+- Компромисс: больше свободы дизайна, но больше индивидуальной сборки/QA на каждый эпизод.
 
-### 4. Hybrid reel
+### 4. Гибридный рилс (hybrid reel)
 
-Use when the top-level structure is standard, but the body needs one custom graphic segment.
+Используй, когда структура верхнего уровня стандартная, но основной части нужен один кастомный графический сегмент.
 
-- Standard hook + CTA assets.
-- Standard TTS/subtitles.
-- Body is either:
-  - standard b-roll with one generated graphic insert, or
-  - a custom rendered body segment fed into final assembly.
-- This is the likely target for the “нижний ряд с видеороликами/графикой” workflow.
+- Стандартные ассеты хука + CTA.
+- Стандартные TTS/субтитры.
+- Основная часть — это либо:
+  - стандартный b-roll с одной сгенерированной графической вставкой, либо
+  - кастомный отрендеренный сегмент основной части, подаваемый в финальную сборку.
+- Это вероятная цель для процесса «нижний ряд с видеороликами/графикой».
 
-### 5. Talking head dynamic clean
+### 5. Чистая динамичная нарезка talking-head (talking head dynamic clean)
 
-Use when the user provides one long talking-head video, or several talking-head
-takes, and wants a clean dynamic edit before adding subtitles, music, labels, or
-other reel effects.
+Используй, когда пользователь предоставляет одно длинное talking-head видео или несколько
+talking-head дублей и хочет чистый динамичный монтаж перед добавлением субтитров, музыки, подписей или
+других эффектов рилса.
 
-- Content mode: typically a `talking_head` source — any raw talking-head
-  footage that should become a vertical reel.
-- Production route: `talking_head_dynamic_clean`.
-- Source: one or more raw video files.
-- Output: `1080x1920` vertical video with cleaned speech, dynamic framing, and
-  light transitions between cuts.
-- Do not add subtitles, captions, headings, music, brand anchors, stickers, look
-  filters, or decorative overlays by default.
-- If the user asks to assemble a talking-head reel and does not explicitly say
-  whether subtitles are needed, ask one short question before rendering:
-  "с субтитрами или только чистая нарезка?"
-- If subtitles are requested, use the standard-mode subtitle defaults unless the
-  user asks otherwise: `edit_profile.subtitle_style` from `config.yaml`, currently
-  `editorial_pop`. Keep `final_clean.mp4` as the clean cut and also write
-  `final_subtitled.mp4`, `subtitles.ass`, and the subtitle timing artifacts.
-- Remove dead air, long pauses, obvious restarts, failed takes, and duplicate
-  attempts when the better take is present.
-- Keep short natural pauses when they carry rhythm or meaning; the edit should
-  feel human, not over-compressed.
-- In `smart` retake mode, transcribe the source and remove failed repeated
-  attempts by text similarity, not by silence alone. Write automatic and
-  review-only decisions to `retake_decisions.json`.
-- Add a transition between visible cuts. The default transition is a very short
-  cinematic micro-push, about 0.12-0.20 seconds. Use stronger swipes only
-  between major semantic blocks.
-- Change framing every 2-4 seconds, paced to speech and pauses. Prefer plan
-  changes at phrase endings, before new arguments, and around emphasis points.
+- Контентный режим: обычно источник `talking_head` — любой сырой talking-head
+  материал, который должен стать вертикальным видео.
+- Производственный маршрут: `talking_head_dynamic_clean`.
+- Источник: один или несколько сырых видеофайлов.
+- Вывод: вертикальное видео `1080x1920` с очищенной речью, динамичным кадрированием и
+  лёгкими переходами между склейками.
+- Не добавляй субтитры, подписи, заголовки, музыку, брендовые опоры, стикеры, фильтры
+  картинки или декоративные оверлеи по умолчанию.
+- Если пользователь просит собрать talking-head рилс и явно не говорит,
+  нужны ли субтитры, задай один короткий вопрос перед рендером:
+  «с субтитрами или только чистая нарезка?»
+- Если субтитры запрошены, используй настройки субтитров по умолчанию из стандартного режима, если
+  пользователь не просит иного: `edit_profile.subtitle_style` из `config.yaml`, сейчас
+  `editorial_pop`. Оставь `final_clean.mp4` как чистую нарезку и также запиши
+  `final_subtitled.mp4`, `subtitles.ass` и артефакты тайминга субтитров.
+- Убирай мёртвый эфир, длинные паузы, явные перезапуски, неудачные дубли и дублирующиеся
+  попытки, когда присутствует лучший дубль.
+- Сохраняй короткие естественные паузы, когда они несут ритм или смысл; монтаж должен
+  ощущаться живым, а не пережатым.
+- В режиме перезапусков `smart` транскрибируй источник и убирай неудачные повторяющиеся
+  попытки по схожести текста, а не только по тишине. Записывай автоматические и
+  требующие проверки решения в `retake_decisions.json`.
+- Добавляй переход между видимыми склейками. Переход по умолчанию — очень короткий
+  кинематографичный микро-толчок, около 0.12-0.20 секунды. Используй более сильные свайпы только
+  между крупными смысловыми блоками.
+- Меняй кадрирование каждые 2-4 секунды, подстраиваясь под речь и паузы. Предпочитай смену
+  плана на окончаниях фраз, перед новыми аргументами и около точек акцента.
 
-Frame types:
+Типы кадров:
 
-- `medium`: baseline talking-head composition. For horizontal sources, preserve
-  the full-width talking-head scale on a clean neutral canvas; do not use a
-  blurred duplicate of the source as background. The speaker should feel
-  comfortable and not too close.
-- `close`: tighter crop for punchlines, emotionally important phrases, key
-  conclusions, and short emphasis moments. For horizontal sources, use a
-  tighter full-width framed `medium_close` instead of a vertical face crop.
-- `medium_with_broll`: a dynamic frame change where the talking-head composition
-  keeps exactly the same foreground scale as `medium`, then the full talking-head
-  frame moves upward and a relevant b-roll lane appears below. The head must not
-  become larger; the cinematic effect comes from changing composition, not
-  zooming in.
+- `medium`: базовая talking-head композиция. Для горизонтальных источников сохраняй
+  масштаб talking-head на всю ширину на чистом нейтральном холсте; не используй
+  размытую копию источника как фон. Спикеру должно быть
+  комфортно, и он не должен быть слишком близко.
+- `close`: более плотный кроп для панчлайнов, эмоционально важных фраз, ключевых
+  выводов и коротких моментов акцента. Для горизонтальных источников используй
+  более плотный кадр `medium_close` на всю ширину вместо вертикального кропа лица.
+- `medium_with_broll`: динамичная смена кадра, где talking-head композиция
+  сохраняет ровно тот же масштаб переднего плана, что и `medium`, затем весь talking-head
+  кадр сдвигается вверх, а ниже появляется релевантная полоса b-roll. Голова не должна
+  становиться больше; кинематографичный эффект достигается сменой композиции, а не
+  приближением.
 
-Agent workflow:
+Рабочий процесс агента:
 
-1. Ingest the raw video or videos and create `output/{slug}`.
-   - If raw talking-head videos were dropped into the project root, move them
-     and matching `{stem}.transcript.json` / `{stem}.transcript.json.hash`
-     sidecars into `assets/talking_head_sources/{slug}/` before processing.
-     The renderer applies this rule automatically for root-level inputs.
-2. Detect speech, pauses, and candidate cut points from audio.
-3. Remove only clear long silences and obvious unusable gaps automatically.
-   Keep enough audio padding around speech so quiet syllables and phrase endings
-   are not clipped.
-4. Run retake planning unless disabled: group repeated attempts by transcript
-   similarity, apply confident safe/smart choices, and leave uncertain groups in
-   `retake_decisions.json` as `needs_review`.
-5. Split the remaining speech into 2-4 second visual beats.
-6. Assign frame types so adjacent beats feel like intentional shot changes:
-   `medium`, `close`, then `medium_with_broll` when suitable b-roll exists.
-7. For `medium_with_broll`, use only relevant clean b-roll. If no matching b-roll
-   exists, choose `medium` or `close` instead of inserting random footage.
-8. Render `final_clean.mp4`, `edit_decisions.json`, `retake_decisions.json`,
-   and `render_metadata.json`.
-9. If subtitles were requested, build a final timeline transcript from the kept
-   chunks, generate standard ASS subtitles, and burn them into
+1. Загрузи сырое видео или видео и создай `output/{slug}`.
+   - Если сырые talking-head видео были сложены в корень проекта, перемести их
+     и соответствующие сайдкары `{stem}.transcript.json` / `{stem}.transcript.json.hash`
+     в `assets/talking_head_sources/{slug}/` перед обработкой.
+     Рендерер применяет это правило автоматически для входных файлов в корне.
+2. Определи речь, паузы и потенциальные точки склейки из аудио.
+3. Убирай автоматически только явные длинные тишины и очевидные непригодные пробелы.
+   Оставляй достаточно аудио-подложки вокруг речи, чтобы тихие слоги и окончания фраз
+   не обрезались.
+4. Запускай планирование перезапусков, если не отключено: группируй повторяющиеся попытки по схожести
+   транскрипта, применяй уверенные безопасные/умные выборы и оставляй неуверенные группы в
+   `retake_decisions.json` как `needs_review`.
+5. Раздели оставшуюся речь на визуальные доли по 2-4 секунды.
+6. Назначь типы кадров так, чтобы соседние доли ощущались как намеренные смены плана:
+   `medium`, `close`, затем `medium_with_broll`, когда есть подходящий b-roll.
+7. Для `medium_with_broll` используй только релевантный чистый b-roll. Если подходящего b-roll
+   нет, выбирай `medium` или `close` вместо вставки случайного материала.
+8. Отрендери `final_clean.mp4`, `edit_decisions.json`, `retake_decisions.json`
+   и `render_metadata.json`.
+9. Если субтитры были запрошены, собери финальный транскрипт таймлайна из сохранённых
+   кусков, сгенерируй стандартные ASS-субтитры и впечатай их в
    `final_subtitled.mp4`.
-10. QA the result for audio sync, subtitle sync when enabled, accidental black frames, bad face crop, harsh
-   cuts, and unwanted text/effects.
+10. Проведи QA результата на синхрон аудио, синхрон субтитров (когда включены), случайные чёрные кадры, плохой кроп лица, резкие
+   склейки и нежелательный текст/эффекты.
 
-## Recommended defaults
+## Рекомендуемые значения по умолчанию
 
-- For product / advice reels: `standard mode`.
-- For controlled tests with existing clips: `generated_video` + `library_manual`.
-- For agent-process / visual explanation reels: `generated_video` + `hybrid`.
-- For fully self-shot “объяснять с картинками” reels: `explain_with_images` + `hybrid`.
-- For raw talking-head footage: `talking_head` + `talking_head_dynamic_clean`.
-- For a day of horizontal clips: the **3-strip** route (`pipelines/three_strip/`).
+- Для рилсов про продукт / совет: `standard mode`.
+- Для контролируемых тестов с существующими клипами: `generated_video` + `library_manual`.
+- Для рилсов о процессе агента / визуальном объяснении: `generated_video` + `hybrid`.
+- Для полностью самостоятельно снятых рилсов «объяснять с картинками»: `explain_with_images` + `hybrid`.
+- Для сырого talking-head материала: `talking_head` + `talking_head_dynamic_clean`.
+- Для дня горизонтальных клипов: маршрут **3-strip** (`pipelines/three_strip/`).

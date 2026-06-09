@@ -1,49 +1,49 @@
-# Voiceover Style
+# Стиль озвучки
 
-These rules define how agents should prepare `voiceover_text` for generated reels.
-They are intentionally repository-level rules so Codex, Claude, and future agents
-make the same choices.
+Эти правила определяют, как агенты должны готовить `voiceover_text` для генерируемых рилсов.
+Они намеренно заданы на уровне репозитория, чтобы Codex, Claude и будущие агенты
+делали одинаковый выбор.
 
-## Markers
+## Маркеры
 
-- Use `{{pause:0.30}}` for an explicit pause in seconds.
-- Existing `<<0.30>>` markers are supported for old scripts, but new scripts should use `{{pause:0.30}}`.
-- Use `{{slow}}...{{/slow}}` for a short phrase that should be spoken slightly slower.
-- Do not put markers into subtitles manually. The pipeline strips markers from alignment and display text.
-- Put pronunciation fixes into `assets/pronunciation.yaml` instead of repeating stress marks in every script.
+- Используйте `{{pause:0.30}}` для явной паузы в секундах.
+- Старые маркеры `<<0.30>>` поддерживаются для прежних сценариев, но в новых сценариях следует использовать `{{pause:0.30}}`.
+- Используйте `{{slow}}...{{/slow}}` для короткой фразы, которую нужно произнести чуть медленнее.
+- Не вставляйте маркеры в субтитры вручную. Пайплайн убирает маркеры из выравнивания и из отображаемого текста.
+- Исправления произношения добавляйте в `assets/pronunciation.yaml`, а не повторяйте ударения в каждом сценарии.
 
-## Pauses
+## Паузы
 
-- Add `{{pause:0.25}}` to `{{pause:0.35}}` between short list items that would otherwise sound rushed.
-- Add `{{pause:0.30}}` to `{{pause:0.40}}` after structural beats like `Первое.`, `Второе.`, `И нет.`, `А именно.`
-- Add `{{pause:0.30}}` to `{{pause:0.40}}` when the thought changes sharply.
-- Add a small pause before a brand, platform, or product name when it is the point of the phrase.
-- Do not add pauses after every sentence. The result should stay conversational, not chopped.
+- Добавляйте `{{pause:0.25}}` — `{{pause:0.35}}` между короткими пунктами списка, которые иначе звучали бы скомканно.
+- Добавляйте `{{pause:0.30}}` — `{{pause:0.40}}` после структурных переходов вроде `Первое.`, `Второе.`, `И нет.`, `А именно.`
+- Добавляйте `{{pause:0.30}}` — `{{pause:0.40}}`, когда мысль резко меняется.
+- Добавляйте небольшую паузу перед названием бренда, платформы или продукта, когда именно оно — суть фразы.
+- Не добавляйте паузы после каждого предложения. В итоге речь должна оставаться разговорной, а не рубленой.
 
-## Slowdown
+## Замедление
 
-- The pipeline automatically slows the final voiceover segment a little.
-- Use `{{slow}}...{{/slow}}` manually only for punchlines, important numbers, or the emphasized side of `не X, а Y`.
-- Prefer slowing the last 2-4 words of a sentence, not a whole paragraph.
-- For numeric proof points, slow the result, not the setup: `с 4200 до {{slow}}1800 рублей{{/slow}}`.
+- Пайплайн автоматически немного замедляет финальный сегмент озвучки.
+- Используйте `{{slow}}...{{/slow}}` вручную только для панчлайнов, важных чисел или подчёркнутой стороны конструкции `не X, а Y`.
+- Лучше замедлять последние 2–4 слова предложения, а не целый абзац.
+- Для числовых доводов замедляйте результат, а не подводку: `с 4200 до {{slow}}1800 рублей{{/slow}}`.
 
-## Pronunciation
+## Произношение
 
-- Add recurring stress fixes to `assets/pronunciation.yaml`.
-- Use combining acute stress only for one-off words when the dictionary would be too broad.
-- Keep subtitles clean: no stress marks, no caps-only pronunciation hacks, no agent notes.
-- Known fixes start with lead forms: `ли́д`, `ли́да`, `ли́ды`, `ли́дов`.
+- Повторяющиеся исправления ударений добавляйте в `assets/pronunciation.yaml`.
+- Комбинируемый знак острого ударения используйте только для разовых слов, когда словарь оказался бы слишком широким.
+- Держите субтитры чистыми: без знаков ударения, без хаков с CAPS-написанием для произношения, без заметок агента.
+- Известные исправления начинаются с базовых форм: `ли́д`, `ли́да`, `ли́ды`, `ли́дов`.
 
-## Example
+## Пример
 
-Raw idea:
+Исходная идея:
 
 ```text
 Не занимался рекламой, а Яндекс Директ. Метрика. Работа с воронкой.
 Не развивал канал, а снизил стоимость лида с 4200 до 1800 рублей за полгода.
 ```
 
-Voiceover text:
+Текст озвучки:
 
 ```text
 Не занимался рекламой, а {{slow}}Яндекс Директ{{/slow}}. {{pause:0.25}} Метрика. {{pause:0.25}} Работа с воронкой.
