@@ -23,8 +23,16 @@ __pycache__/
 output/
 raw/*
 !raw/README.md
-data/*.sqlite
+data/*.sqlite*
 data/*.sqlite-*
+data/*.bak*
+
+# ── Personal 3-strip episode configs (ship only the example) ────────────
+pipelines/three_strip/episodes/*.conf
+!pipelines/three_strip/episodes/example.conf
+
+# ── Internal planning notes (kept local, not for the public repo) ───────
+docs/superpowers/
 
 # ── Media: never commit binary video/audio (root, raw/, assets/, anywhere) ─
 # This is the safety net — the engine assets we DO ship (fonts, _meta.json,

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block page_title %}Библиотека сценариев{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell">
+      {% block before_header %}{% endblock %}
+      <header class="topbar">
+        <div>
+          <h1>{% block header_title %}Библиотека сценариев{% endblock %}</h1>
+          <p>{% block header_subtitle %}База сценариев: видео под ключ, челлендж и объясняющие рилсы с картинками.{% endblock %}</p>
+        </div>
+        {% block header_actions %}{% endblock %}
+      </header>
+
+      {% include "components/tabs.html" %}
+
+      {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+      {% block content %}{% endblock %}
+    </main>
+    <script>
+      document.querySelectorAll(".auto-submit select").forEach((select) => {
+        select.addEventListener("change", () => select.form.requestSubmit());
+      });
+      function closeModal(modal) {
+        if (!modal) return;
+        modal.classList.remove("is-open");
+        modal.setAttribute("aria-hidden", "true");
+      }
+      document.querySelectorAll("[data-modal-open]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const modal = document.getElementById(button.dataset.modalOpen);
+          if (!modal) return;
+          modal.classList.add("is-open");
+          modal.setAttribute("aria-hidden", "false");
+          const focusTarget = modal.querySelector("input, select, textarea, button");
+          if (focusTarget) focusTarget.focus();
+        });
+      });
+      document.querySelectorAll("[data-modal-close]").forEach((button) => {
+        button.addEventListener("click", () => closeModal(button.closest(".modal")));
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        document.querySelectorAll(".modal.is-open").forEach(closeModal);
+      });
+    </script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

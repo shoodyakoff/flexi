@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ item_type_labels.get(item_type, 'Библиотека сценариев') }} · Библиотека сценариев{% endblock %}
+{% block header_title %}Библиотека сценариев{% endblock %}
+{% block header_subtitle %}База сценариев: видео под ключ, челлендж, объясняющие рилсы и бэклог.{% endblock %}
+
+{% block content %}
+  {% with create_kind=item_type, modal_id='create-modal' %}
+    {% include "components/create_panel.html" %}
+  {% endwith %}
+
+  <section class="panel">
+    {% include "components/library_filters.html" %}
+    {% include "components/library_list.html" %}
+  </section>
+{% endblock %}

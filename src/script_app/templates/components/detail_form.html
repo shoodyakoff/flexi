@@ -1,0 +1,171 @@
+<form class="panel edit detail-form" method="post" action="{{ form_action }}" id="{{ form_id }}">
+  <label>Название <input name="title" value="{{ row.title }}"></label>
+  <label>Статус
+    <select name="status">
+      {% for option in status_options %}
+      <option value="{{ option }}" {{ 'selected' if row.status == option else '' }}>
+        {% if row.item_type == 'challenge_backlog' %}{{ backlog_status_labels.get(option, option) }}{% else %}{{ status_labels.get(option, option) }}{% endif %}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+
+  {% if row.item_type == 'generated_video' %}
+  <div class="row">
+    <label>Этап воронки <select name="funnel_stage">{% for option in ['TOFU', 'MOFU', 'BOFU'] %}<option value="{{ option }}" {{ 'selected' if row.funnel_stage == option else '' }}>{{ funnel_stage_labels.get(option, option) }}</option>{% endfor %}</select></label>
+    <label>Тип призыва <select name="cta_type">{% for option in ['save', 'link', 'keyword', 'pinned', 'other'] %}<option value="{{ option }}" {{ 'selected' if row.cta_type == option else '' }}>{{ cta_type_labels.get(option, option) }}</option>{% endfor %}</select></label>
+    <label>Кодовое слово <input name="keyword" value="{{ row.keyword or '' }}"></label>
+  </div>
+  <label>Хук <textarea name="hook_text" rows="3">{{ row.hook_text }}</textarea></label>
+  <label>Основной текст без пауз <textarea name="voiceover_text_raw" rows="7">{{ row.voiceover_text_raw }}</textarea></label>
+  <label>Основной текст для озвучки <textarea name="voiceover_text_marked" rows="7">{{ row.voiceover_text_marked }}</textarea></label>
+  <label>Призыв <textarea name="cta_text" rows="3">{{ row.cta_text }}</textarea></label>
+  <label>Описание <textarea name="caption_text" rows="10">{{ row.caption_text }}</textarea></label>
+  <label>Закреплённый комментарий <textarea name="pinned_comment" rows="2">{{ row.pinned_comment }}</textarea></label>
+  <div class="row">
+    <label>Видео-хук
+      <select name="hook_asset_id">
+        <option value="">Не выбран</option>
+        {% for option in hook_options %}<option value="{{ option }}" {{ 'selected' if row.hook_asset_id == option else '' }}>{{ option }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Видео-призыв
+      <select name="cta_asset_id">
+        <option value="">Не выбран</option>
+        {% for option in cta_options %}<option value="{{ option }}" {{ 'selected' if row.cta_asset_id == option else '' }}>{{ option }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  {% elif row.item_type == 'challenge_episode' %}
+  <div class="row">
+    <label>День <input name="day_number" value="{{ row.day_number or '' }}"></label>
+    <label>Эпизод <input name="episode_label" value="{{ row.episode_label or '' }}"></label>
+  </div>
+  <label>Тема <input name="core_topic" value="{{ row.core_topic }}"></label>
+  <div class="row">
+    <label>Стрим дохода
+      <select name="business_stream">
+        <option value="">Не выбран</option>
+        {% if row.business_stream and row.business_stream not in business_stream_options %}
+        <option value="{{ row.business_stream }}" selected>{{ row.business_stream }}</option>
+        {% endif %}
+        {% for option in business_stream_options %}
+        <option value="{{ option }}" {{ 'selected' if row.business_stream == option else '' }}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Направление
+      <select name="challenge_pillar">
+        <option value="">Не выбрано</option>
+        {% for value, label in challenge_direction_labels.items() %}
+        <option value="{{ value }}" {{ 'selected' if row.challenge_pillar == value else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="hint">Нужно для планирования: дневник, ремесло, маркетинговые агенты, личная история или заказная разработка.</span>
+    </label>
+    <label>Класс хука
+      <select name="hook_class">
+        <option value="">Не выбран</option>
+        {% for value, label in hook_class_labels.items() %}
+        <option value="{{ value }}" {{ 'selected' if row.hook_class == value else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="hint">Влияет на будущую сборку сценария: процесс, результат, провал, сам ролик как доказательство или лайв-перезагрузка.</span>
+    </label>
+    <label>Серия <input name="series_key" value="{{ row.series_key }}"></label>
+  </div>
+  <label>Первая строка <textarea name="opening_line" rows="2">{{ row.opening_line }}</textarea></label>
+  <label>Сценарий <textarea name="script_text" rows="14">{{ row.script_text }}</textarea></label>
+  <label>Призыв <textarea name="cta_text" rows="3">{{ row.cta_text }}</textarea></label>
+  <label>Раскадровка <textarea name="storyboard_text" rows="8">{{ row.storyboard_text }}</textarea></label>
+  <label>Решения по ролику <textarea name="decisions_text" rows="8">{{ row.decisions_text }}</textarea></label>
+  <label>Чем заменён исходный драфт <textarea name="replaced_draft_text" rows="5">{{ row.replaced_draft_text }}</textarea></label>
+  <label>Отложенные возвращения <textarea name="deferred_results_text" rows="5">{{ row.deferred_results_text }}</textarea></label>
+  <label>Заметки по формату <textarea name="format_notes" rows="3">{{ row.format_notes }}</textarea></label>
+  {% elif row.item_type == 'image_explainer' %}
+  <div class="row">
+    <label>Тема <input name="core_topic" value="{{ row.core_topic }}"></label>
+    <label>Серия <input name="series_key" value="{{ row.series_key }}"></label>
+  </div>
+  <label>Хук <textarea name="hook_text" rows="4">{{ row.hook_text }}</textarea></label>
+  <label>Сценарий <textarea name="script_text" rows="14">{{ row.script_text }}</textarea></label>
+  <label>Призыв <textarea name="cta_text" rows="3">{{ row.cta_text }}</textarea></label>
+  <label>Картинки / экранные опоры <textarea name="storyboard_text" rows="8">{{ row.storyboard_text }}</textarea></label>
+  <label>Решения по ролику <textarea name="decisions_text" rows="5">{{ row.decisions_text }}</textarea></label>
+  <label>Заметки по формату <textarea name="format_notes" rows="3">{{ row.format_notes }}</textarea></label>
+  {% else %}
+  <div class="row">
+    <label>Категория
+      <select name="category">
+        <option value="">Без категории</option>
+        {% if row.category and row.category not in backlog_category_options %}
+        <option value="{{ row.category }}" selected>{{ row.category }}</option>
+        {% endif %}
+        {% for option in backlog_category_options %}
+        <option value="{{ option }}" {{ 'selected' if row.category == option else '' }}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Направление
+      <select name="challenge_pillar">
+        <option value="">Не выбрано</option>
+        {% if row.challenge_pillar and row.challenge_pillar not in challenge_direction_labels %}
+        <option value="{{ row.challenge_pillar }}" selected>{{ row.challenge_pillar }}</option>
+        {% endif %}
+        {% for value, label in challenge_direction_labels.items() %}
+        <option value="{{ value }}" {{ 'selected' if row.challenge_pillar == value else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="hint">Зачем: чтобы видеть баланс дневника, ремесла, агентов, личной истории и заказной разработки.</span>
+    </label>
+    <label>Класс хука
+      <select name="hook_class">
+        <option value="">Не выбран</option>
+        {% if row.hook_class and row.hook_class not in hook_class_labels %}
+        <option value="{{ row.hook_class }}" selected>{{ row.hook_class }}</option>
+        {% endif %}
+        {% for value, label in hook_class_labels.items() %}
+        <option value="{{ value }}" {{ 'selected' if row.hook_class == value else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="hint">Влияет на будущий сценарий: какой тип первой строки и доказательства выбирать.</span>
+    </label>
+  </div>
+  <div class="row">
+    <label>Стрим дохода
+      <select name="business_stream">
+        <option value="">Не выбран</option>
+        {% if row.business_stream and row.business_stream not in business_stream_options %}
+        <option value="{{ row.business_stream }}" selected>{{ row.business_stream }}</option>
+        {% endif %}
+        {% for option in business_stream_options %}
+        <option value="{{ option }}" {{ 'selected' if row.business_stream == option else '' }}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Источник
+      <select name="source">
+        {% if row.source and row.source not in source_labels %}
+        <option value="{{ row.source }}" selected>{{ row.source }}</option>
+        {% endif %}
+        {% for value, label in source_labels.items() %}
+        <option value="{{ value }}" {{ 'selected' if row.source == value else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Когда вернуться <input name="return_window" value="{{ row.return_window }}"></label>
+    <label>Дата возврата
+      <input name="due_date" value="{{ row.due_date or '' }}" placeholder="YYYY-MM-DD">
+      <span class="hint">Если оставить пустой, система попробует поставить дату из поля «Когда вернуться».</span>
+    </label>
+  </div>
+  {% if row.source_episode_id %}
+  <p class="meta">Источник: <a href="/scripts/{{ row.source_episode_id }}">{{ row.source_episode_label or row.source_episode_id }}</a></p>
+  {% endif %}
+  {% endif %}
+
+  <label>Заметки <textarea name="notes" rows="3">{{ row.notes }}</textarea></label>
+  <div class="form-actions">
+    <button>Сохранить</button>
+  </div>
+</form>

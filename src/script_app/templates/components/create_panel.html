@@ -1,0 +1,140 @@
+{% set modal_id = modal_id|default('create-modal') %}
+<div class="create-action">
+  <button class="add-button" type="button" data-modal-open="{{ modal_id }}">Добавить</button>
+</div>
+
+<div class="modal" id="{{ modal_id }}" aria-hidden="true">
+  <div class="modal-backdrop" data-modal-close></div>
+  <section class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="{{ modal_id }}-title">
+    <button class="modal-close" type="button" data-modal-close aria-label="Закрыть">x</button>
+    {% if create_kind == 'generated_video' %}
+    <h2 id="{{ modal_id }}-title">Новый сценарий</h2>
+    <form class="grid-form" action="/generate" method="post">
+      <label>Тема <input name="topic" placeholder="первый экран резюме"></label>
+      <label>Этап воронки
+        <select name="funnel_stage">
+          {% for option in ['TOFU', 'MOFU', 'BOFU'] %}
+          <option value="{{ option }}">{{ funnel_stage_labels.get(option, option) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Призыв
+        <select name="cta_type">
+          <option value="save">сохранить</option>
+          <option value="link">ссылка</option>
+          <option value="keyword">кодовое слово</option>
+        </select>
+      </label>
+      <label>Формат <input name="format_name" value="основной"></label>
+      <label class="wide">Контекст <textarea name="context" rows="2" placeholder="цифра, профессия, история, пример"></textarea></label>
+      <button>Сгенерировать черновик</button>
+    </form>
+    {% elif create_kind == 'challenge_episode' %}
+    <h2 id="{{ modal_id }}-title">Новый выпуск челленджа</h2>
+    <form class="grid-form" action="/challenge/create" method="post">
+      <label>Название <input name="title" placeholder="D8 — тема выпуска"></label>
+      <label>День <input name="day_number" inputmode="numeric" placeholder="8"></label>
+      <label>Эпизод <input name="episode_label" placeholder="D8"></label>
+      <label>Статус
+        <select name="status">
+          {% for option in status_options %}
+          <option value="{{ option }}">{{ status_labels.get(option, option) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Тема <input name="core_topic" placeholder="агент / продукт / история"></label>
+      <label>Стрим дохода
+        <select name="business_stream">
+          <option value="">Не выбран</option>
+          {% for option in business_stream_options %}
+          <option value="{{ option }}">{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Направление
+        <select name="challenge_pillar">
+          <option value="">Не выбрано</option>
+          {% for value, label in challenge_direction_labels.items() %}
+          <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Класс хука
+        <select name="hook_class">
+          <option value="">Не выбран</option>
+          {% for value, label in hook_class_labels.items() %}
+          <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="wide">Первая строка <textarea name="opening_line" rows="2"></textarea></label>
+      <label class="wide">Сценарий <textarea name="script_text" rows="6"></textarea></label>
+      <button>Создать</button>
+    </form>
+    {% elif create_kind == 'image_explainer' %}
+    <h2 id="{{ modal_id }}-title">Новый рилс</h2>
+    <form class="grid-form" action="/explain-with-images/create" method="post">
+      <label>Название <input name="title" placeholder="Вайбкодинг: какие кнопки нажимать"></label>
+      <label>Тема <input name="core_topic" placeholder="вайбкодинг / Codex"></label>
+      <label>Серия <input name="series_key" value="trend-explainer"></label>
+      <label>Заметки по формату <input name="format_notes" placeholder="hybrid: talking head + ноутбук"></label>
+      <label class="wide">Хук <textarea name="hook_text" rows="3"></textarea></label>
+      <label class="wide">Сценарий <textarea name="script_text" rows="7"></textarea></label>
+      <label class="wide">Призыв <textarea name="cta_text" rows="2"></textarea></label>
+      <label class="wide">Картинки / экранные опоры <textarea name="storyboard_text" rows="4"></textarea></label>
+      <button>Создать</button>
+    </form>
+    {% elif create_kind == 'challenge_backlog' %}
+    <h2 id="{{ modal_id }}-title">Новая тема в бэклоге</h2>
+    <form class="grid-form" action="/challenge-backlog/create" method="post">
+      {% if source_episode_id is defined and source_episode_id %}
+      <input type="hidden" name="source_episode_id" value="{{ source_episode_id }}">
+      {% endif %}
+      <label>Тема <input name="title" placeholder="Что проверить позже"></label>
+      <label>Статус
+        <select name="status">
+          {% for option in backlog_status_options %}
+          <option value="{{ option }}">{{ backlog_status_labels.get(option, option) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Категория
+        <select name="category">
+          <option value="">Без категории</option>
+          {% for option in backlog_category_options %}
+          <option value="{{ option }}">{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Направление
+        <select name="challenge_pillar">
+          <option value="">Не выбрано</option>
+          {% for value, label in challenge_direction_labels.items() %}
+          <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Класс хука
+        <select name="hook_class">
+          <option value="">Не выбран</option>
+          {% for value, label in hook_class_labels.items() %}
+          <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Стрим дохода
+        <select name="business_stream">
+          <option value="">Не выбран</option>
+          {% for option in business_stream_options %}
+          <option value="{{ option }}">{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Когда вернуться <input name="return_window" placeholder="через 2 недели"></label>
+      <label>Дата возврата <input name="due_date" placeholder="YYYY-MM-DD"></label>
+      <label class="wide">Заметки <textarea name="notes" rows="4"></textarea></label>
+      <button>Создать</button>
+    </form>
+    {% endif %}
+  </section>
+</div>

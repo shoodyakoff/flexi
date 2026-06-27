@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ row.title }} · Библиотека сценариев{% endblock %}
+{% block before_header %}
+  <a class="back guarded-nav" href="/?item_type={{ row.item_type }}">← Все сценарии</a>
+{% endblock %}
+{% block header_title %}{{ row.title }}{% endblock %}
+{% block header_subtitle %}{{ item_type_labels.get(row.item_type, row.item_type) }} · {{ status_labels.get(row.status, row.status) }}{% endblock %}
+
+{% block content %}
+  <nav class="detail-nav" aria-label="Навигация по сценариям">
+    {% if previous_row %}
+    <a class="nav-arrow prev guarded-nav" href="/scripts/{{ previous_row.id }}" data-nav-url="/scripts/{{ previous_row.id }}" aria-label="Предыдущий сценарий">←</a>
+    {% else %}
+    <span class="nav-arrow prev disabled" aria-hidden="true">←</span>
+    {% endif %}
+    {% if next_row %}
+    <a class="nav-arrow next guarded-nav" href="/scripts/{{ next_row.id }}" data-nav-url="/scripts/{{ next_row.id }}" aria-label="Следующий сценарий">→</a>
+    {% else %}
+    <span class="nav-arrow next disabled" aria-hidden="true">→</span>
+    {% endif %}
+  </nav>
+
+  {% with form_action='/scripts/' ~ row.id, form_id='script-edit-form' %}
+    {% include "components/detail_form.html" %}
+  {% endwith %}
+
+  {% if row.item_type == 'challenge_episode' %}
+  <section class="panel stack">
+    <div class="section-heading">
+      <div>
+        <h2>Бэклог челенджа</h2>
+        <p>Темы и отложенные обещания, привязанные к этому выпуску.</p>
+      </div>
+      <a class="secondary-button" href="/?item_type=challenge_backlog">Весь бэклог</a>
+    </div>
+    {% with create_kind='challenge_backlog', source_episode_id=row.id, modal_id='backlog-create-modal' %}
+      {% include "components/create_panel.html" %}
+    {% endwith %}
+    {% with rows=related_backlog, empty_text='Для этого выпуска пока нет связанных тем.' %}
+      {% include "components/library_list.html" %}
+    {% endwith %}
+  </section>
+  {% endif %}
+
+  {% if row.item_type == 'generated_video' %}
+  <section class="actions">
+    <form method="post" action="/scripts/{{ row.id }}/annotate"><button>Подготовить озвучку</button></form>
+    <form method="post" action="/scripts/{{ row.id }}/export"><button>Экспортировать сценарий для сборки</button></form>
+    {% if row.exported_script_path %}<p>Экспорт: {{ row.exported_script_path }}</p>{% endif %}
+  </section>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    const editForm = document.querySelector("#script-edit-form");
+    const initialState = editForm ? new FormData(editForm) : null;
+
+    function isDirty() {
+      if (!editForm || !initialState) return false;
+      const currentState = new FormData(editForm);
+      const keys = new Set([...initialState.keys(), ...currentState.keys()]);
+      for (const key of keys) {
+        if (initialState.get(key) !== currentState.get(key)) return true;
+      }
+      return false;
+    }
+
+    function submitAndGo(url) {
+      let nextInput = editForm.querySelector('input[name="next"]');
+      if (!nextInput) {
+        nextInput = document.createElement("input");
+        nextInput.type = "hidden";
+        nextInput.name = "next";
+        editForm.append(nextInput);
+      }
+      nextInput.value = url;
+      editForm.requestSubmit();
+    }
+
+    document.querySelectorAll(".guarded-nav").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        if (!isDirty()) return;
+        event.preventDefault();
+        const url = link.dataset.navUrl || link.getAttribute("href");
+        if (!url) return;
+        if (window.confirm("Есть несохранённые изменения. Сохранить перед переходом?")) {
+          submitAndGo(url);
+        } else {
+          window.location.href = url;
+        }
+      });
+    });
+  </script>
+{% endblock %}

@@ -82,6 +82,24 @@ python pipelines/reel_matrix.py build --dir output/matrix \
 - `product` — клип product b-roll для вставки в этот блок, например `sa_2_demo.mp4`
 - `product_from` — отложить демо до этого произнесённого слова, например `пиши`
   (сначала показывается talking head, демо появляется, когда голос доходит до слова)
+- `inserts` — предпочтительный вариант для нескольких product-вставок внутри одного
+  блока. Каждая вставка задаётся как `{ "clip": "demo_match_1.mp4", "from": "соответстви" }`;
+  она начинается на первом слове, где найден `from`, и длится до следующей вставки
+  или до конца блока.
+
+Пример последовательности product-вставок внутри одного tip-блока:
+
+```json
+{
+  "key": "t3",
+  "role": "tip",
+  "inserts": [
+    { "clip": "demo_match_1.mp4", "from": "соответстви" },
+    { "clip": "demo_interview.mp4", "from": "интервьюир" },
+    { "clip": "demo_resume.mp4", "from": "дописыва" }
+  ]
+}
+```
 
 Теги product b-roll лежат в `assets/broll_brand/demo_tags.json`
 (`{clip.mp4: [keyword, ...]}`) и сопоставляются с тем, что говорится на каждом демо-такте.

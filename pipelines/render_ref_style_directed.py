@@ -30,6 +30,18 @@ CLOSE_CROP_X = (W - CLOSE_CROP_W) // 2
 CLOSE_CROP_Y = round((H - CLOSE_CROP_H) * 0.32)
 
 DISPLAY_FIXES = {
+    # The 4-scene palette uses Bebas / fs picto, both of which render a literal
+    # "." cleanly, so the domain dot is a normal period again.
+    "хохору": "ХАХА.РУ",
+    "хахару": "ХАХА.РУ",
+    "хохор": "ХАХА.РУ",
+    "вишек": "ИИшек",
+    "фишек": "ИИшек",
+    "анализируя": "анализируешь",
+    "анализирую": "анализируешь",
+    "профи": "профиля",
+    "свой": "своё",          # "свой резюме" -> "своё резюме"
+    "пиздец": "ПИ***Ц",      # censored on screen (audio unchanged)
     "совреть": "своё",
     "проверя.": "проверяй.",
     "провера.": "проверяй.",
@@ -71,6 +83,35 @@ def probe_color_transfer(path: Path) -> str:
         capture_output=True,
     )
     return result.stdout.strip()
+
+
+def probe_dimensions(path: Path) -> tuple[int, int]:
+    """(width, height) of the first video stream, defaulting to 2:3 portrait."""
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", str(path),
+        ],
+        text=True,
+        capture_output=True,
+    )
+    try:
+        w, h = result.stdout.strip().split("x")
+        return int(w), int(h)
+    except ValueError:
+        return 1080, 1620
+
+
+def fit_dims(src_w: int, src_h: int, max_w: int, max_h: int) -> tuple[int, int]:
+    """Largest even (w, h) that fits the source aspect inside (max_w, max_h).
+
+    Used for the blue-demo card so a product clip is shown WHOLE (letterboxed on
+    the blue grid) instead of being centre-cropped — no UI is cut off.
+    """
+    scale = min(max_w / max(1, src_w), max_h / max(1, src_h))
+    w = max(2, int(round(src_w * scale / 2)) * 2)
+    h = max(2, int(round(src_h * scale / 2)) * 2)
+    return w, h
 
 
 def build_tech_chain(source: Path) -> str:
@@ -135,10 +176,25 @@ def marker_underline(start: float, end: float, x: float, y: float, *, scale: int
 
 def clean_text(text: str, *, uppercase: bool = True) -> str:
     value = re.sub(r"\s+", " ", text.strip())
-    value = value.strip(" ,.!?;:…")
+    # Strip surrounding punctuation, quotation marks and dashes — captions never show
+    # the «…» / "…" quotes or a lone «–» that the transcript carries.
+    value = value.strip(" ,.!?;:…«»\"'„“”‘’–—")
     if uppercase:
         value = value.upper()
     return value
+
+
+def fit_fscx(text: str, font_size: int, *, max_px: int = 950, cap: int = 106) -> int:
+    """Horizontal scale (%) so the widest word fits ``max_px`` at this font size.
+
+    Stepovik SP Basic is a wide display face — long Russian words overflow the
+    frame at fscx=100. We condense each caption to the width of its longest
+    whitespace-separated token so nothing runs off-screen.
+    """
+    tokens = [t for t in re.split(r"\s+", clean_text(text, uppercase=False)) if t]
+    longest = max((len(t) for t in tokens), default=max(1, len(text)))
+    est = max(1.0, longest * font_size * 0.82)  # ~px width at fscx=100
+    return max(46, min(cap, int(round(100 * max_px / est))))
 
 
 def load_transcript(source: Path, transcript_path: Path) -> Transcript:
@@ -545,7 +601,11 @@ def load_words(transcript: Transcript) -> list[dict]:
         text = raw.word.strip()
         if not text:
             continue
-        text = DISPLAY_FIXES.get(text.lower(), text)
+        _key = text.lower()
+        if _key in DISPLAY_FIXES:
+            text = DISPLAY_FIXES[_key]
+        elif _key and _key[-1] in ",.!?;:…\"'" and _key[:-1] in DISPLAY_FIXES:
+            text = DISPLAY_FIXES[_key[:-1]] + _key[-1]
         start = float(raw.start)
         end = float(raw.end)
         if end <= start:
@@ -555,6 +615,10 @@ def load_words(transcript: Transcript) -> list[dict]:
         if text.startswith("-") and words:
             words[-1]["word"] = words[-1]["word"] + text
             words[-1]["end"] = max(words[-1]["end"], end)
+            continue
+        # Skip punctuation-only tokens (e.g. a stray dash "–"/"—"/"-") so they never
+        # flash as their own one-character caption between words.
+        if not re.sub(r"[\s.,!?;:…«»\"'„“”‘’\-–—]", "", text):
             continue
         words.append({"word": text, "start": start, "end": end})
     return words
@@ -581,7 +645,7 @@ def chunk_words(words: list[dict], plan: RefStyleEditPlan) -> list[list[dict]]:
     def max_words_for(format_id: str) -> int:
         return {
             "format_1_hook_metal": 1,
-            "format_2_framed_face": 3,
+            "format_2_framed_face": 2,
             "format_3_turn_badge": 2,
             "format_4_blue_demo": 2,
             "format_5_lower_demo_cta": 2,
@@ -640,11 +704,54 @@ def _metal_caption_tags(size: int, scale_x: int, y: int) -> tuple[str, str]:
     return echo, main
 
 
+def _karaoke_chunk_events(
+    chunk: list[dict],
+    chunk_end: float,
+    layer: int,
+    style: str,
+    *,
+    pos_tags: str,
+    active_pop: str,
+    inactive_dim: str,
+    uppercase: bool = True,
+) -> list[str]:
+    """Per-word karaoke: active word pops (scale+color), others stay dim.
+
+    For a 2-word chunk [W1, W2] emits 2 events:
+      E1 (W1.start → W2.start): W1 bright+big, W2 dim+small
+      E2 (W2.start → chunk_end): W1 dim+small, W2 bright+big
+    Fade-in on first, fade-out on last.
+    """
+    events: list[str] = []
+    n = len(chunk)
+    for i, word in enumerate(chunk):
+        t_start = word["start"]
+        t_end = chunk[i + 1]["start"] if i + 1 < n else chunk_end
+        if t_end <= t_start:
+            t_end = t_start + 0.08
+        if n == 1:
+            fad = "\\fad(50,60)"
+        elif i == 0:
+            fad = "\\fad(50,0)"
+        elif i == n - 1:
+            fad = "\\fad(0,60)"
+        else:
+            fad = ""
+        base_tag = "{" + pos_tags + fad + "}"
+        parts = []
+        for j, w in enumerate(chunk):
+            txt = clean_text(w["word"], uppercase=uppercase)
+            parts.append("{" + (active_pop if j == i else inactive_dim) + "}" + txt)
+        events.append(dialogue(layer, t_start, t_end, style, " ".join(parts), base_tag))
+    return events
+
+
 def write_ass(
     path: Path,
     transcript: Transcript,
     plan: RefStyleEditPlan,
     emphasis_phrases: list[list[str]] = EMPHASIS_PHRASES,
+    cutaways: list[tuple[float, float]] | None = None,
 ) -> None:
     words = load_words(transcript)
     chunks = chunk_words(words, plan)
@@ -657,18 +764,20 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+# --- 4-scene palette (one source of truth) ---------------------------------
+# Scene 1 (hook) & Scene 3 (head+lower-demo): Bebas Neue Cyrillic, white word +
+# red echo offset down-right (Metal=white face, MetalCyan=red echo).
 Style: Metal,Bebas Neue Cyrillic,132,&H00F2F7FF,&H000000FF,&H00121317,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,5,20,20,20,1
 Style: MetalCyan,Bebas Neue Cyrillic,132,&H002030E8,&H000000FF,&H00121317,&H00000000,-1,0,0,0,100,100,0,0,1,4,0,5,20,20,20,1
-Style: ThinPop,Pastry Chef Cyrillic Script,82,&H00FFFFFF,&H000000FF,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,20,20,20,1
-Style: Badge,Bebas Neue Cyrillic,80,&H00FFFFFF,&H000000FF,&H00652D8B,&H00652D8B,-1,0,0,0,100,100,0,0,3,8,0,5,20,20,20,1
-Style: RetroDark,Ruslan Display,138,&H00EDE0A5,&H000000FF,&H00353C31,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,20,20,20,1
-Style: RetroCream,Ruslan Display,132,&H006D3F85,&H000000FF,&H00EEE2A5,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,20,20,20,1
-Style: PosterWhite,Bebas Neue Cyrillic,104,&H00FFFFFF,&H000000FF,&H00202A3A,&H70000000,-1,0,0,0,100,100,0,0,1,5,2,5,20,20,20,1
-Style: EditorialWhite,Onest,92,&H00FFFFFF,&H000000FF,&H00000000,&H70000000,-1,0,0,0,100,100,0,0,1,4,2,5,20,20,20,1
-Style: EditorialYellow,Bebas Neue Cyrillic,128,&H0000F5FF,&H000000FF,&H00000000,&H50000000,-1,0,0,0,100,100,0,0,1,4,4,5,20,20,20,1
-Style: PlainWhite,Onest,86,&H00FFFFFF,&H000000FF,&H30505050,&H90000000,-1,0,0,0,100,100,0,0,1,2,2,5,20,20,20,1
+# Scene 2 (blue product demo): fs picto, white non-accent + yellow accent word.
+Style: EditorialWhite,fs picto,98,&H00FFFFFF,&H000000FF,&H00101012,&H50000000,-1,0,0,0,100,100,0,0,1,6,3,5,20,20,20,1
+Style: EditorialYellow,fs picto,120,&H0000EAFF,&H000000FF,&H00101012,&H50000000,-1,0,0,0,100,100,0,0,1,6,4,5,20,20,20,1
+# Scene 4 (close-up head): Bebas Neue Cyrillic on a black opaque-box plate
+# (BorderStyle=3); white non-accent text + yellow accent word, no size pop so the
+# plate stays steady.
+Style: FacePlate,Bebas Neue Cyrillic,100,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,3,18,0,5,20,20,20,1
+# Vector-path marker (used by the route-draw helper); not a caption style.
 Style: Marker,Arial,40,&H002028E0,&H000000FF,&H002028E0,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,20,20,20,1
-Style: Stamp,Bebas Neue Cyrillic,150,&H30FFFFFF,&H000000FF,&H60202A3A,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,5,20,20,20,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -681,6 +790,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         "format_4_blue_demo",
         "format_5_lower_demo_cta",
     }}
+
+    def _in_cutaway(t: float) -> bool:
+        if not cutaways:
+            return False
+        return any(cs <= t < ce for cs, ce in cutaways)
 
     for chunk_index, chunk in enumerate(chunks):
         start = chunk[0]["start"]
@@ -698,99 +812,98 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         else:
             end = max(end, start + 0.30)
         format_id = format_for_time(plan, start)
-        format_counts[format_id] = format_counts.get(format_id, 0) + 1
-        index = format_counts[format_id] - 1
+        # During head-cutaway windows inside blue-demo beats, keep the same
+        # metal-caption style as the hook so the live face has matching subtitles.
+        # Only override chunks whose first word starts inside the cutaway so captions
+        # that began before the cutaway keep their format_4 top position (safe above
+        # the demo card) rather than jumping to the Metal bottom position mid-demo.
+        effective_format = format_id
+        if format_id == "format_4_blue_demo" and _in_cutaway(start):
+            effective_format = "format_1_hook_metal"
+        elif format_id == "format_3_turn_badge":
+            # turn_badge is retired from the palette — render any such beat as a
+            # plain Scene 1 dynamic head so no orphaned badge styling appears.
+            effective_format = "format_1_hook_metal"
+        format_counts[effective_format] = format_counts.get(effective_format, 0) + 1
+        index = format_counts[effective_format] - 1
         raw_text = " ".join(word["word"] for word in chunk)
 
-        if format_id == "format_1_hook_metal":
+        if effective_format == "format_1_hook_metal":
             text = clean_text(raw_text, uppercase=True)
-            size = max(82, min(154, 174 - len(text) * 4))
-            scale_x = max(55, min(90, 94 - len(text) * 2))
+            size = max(80, min(138, 158 - len(text) * 4))
+            # Bebas Neue is already a narrow face — only condense if a word would
+            # truly overflow (cap near 100), unlike the very wide Stepovik before.
+            scale_x = fit_fscx(text, size, max_px=980, cap=100)
             # Kinetic vertical bounce like the reference hook stickers, sitting in
             # the lower third (closer to the bottom, not centered on the face).
             y = 1300 + (index % 3 - 1) * 64
             echo, main = _metal_caption_tags(size, scale_x, y)
             events.append(dialogue(3, start, end, "MetalCyan", text, echo))
             events.append(dialogue(4, start, end, "Metal", text, main))
-        elif format_id == "format_2_framed_face":
-            text = clean_text(raw_text, uppercase=False)
-            # Always above the photo card like the reference yellow scene.
-            y = 252
-            size = max(88, min(138, 144 - len(text) * 3))
-            tags = (
-                "{\\an5\\fad(70,80)"
-                f"\\pos(540,{y})\\fs{size}\\fscx74\\fscy74\\blur0.12\\alpha&H00&\\bord1.2\\3c&HFFFFFF&"
-                "\\t(0,95,\\fscx108\\fscy108\\blur0.08)"
-                "\\t(95,180,\\fscx100\\fscy100)"
-                "}"
-            )
-            events.append(dialogue(5, start, end, "ThinPop", text, tags))
-        elif format_id == "format_3_turn_badge":
-            # Two words stacked in a fixed place: top word + bottom word appear and
-            # disappear together. Top and bottom always use the same distinct styles.
-            stacked = [clean_text(word["word"], uppercase=True) for word in chunk]
-            stacked = [word for word in stacked if word]
-            top_text = stacked[0] if stacked else ""
-            bottom_text = stacked[1] if len(stacked) > 1 else ""
-            if top_text:
-                top_tags = (
-                    "{\\an5\\pos(540,300)\\fs96\\frz-2\\fscx84\\fscy84"
-                    "\\t(0,100,\\fscx108\\fscy108)\\t(100,180,\\fscx100\\fscy100)}"
-                )
-                events.append(dialogue(6, start, end, "Badge", top_text, top_tags))
-            if bottom_text:
-                bottom_tags = (
-                    "{\\an5\\pos(540,392)\\fs130\\fscx90\\fscy82\\frz1.4\\alpha&H14&"
-                    "\\t(0,120,\\alpha&H00&\\fscy100)}"
-                )
-                events.append(dialogue(7, start, end, "RetroCream", bottom_text, bottom_tags))
-        elif format_id == "format_4_blue_demo":
-            chunk_keys = [_word_key(word["word"]) for word in chunk]
-            is_emphasis = any(
-                chunk_keys == [_word_key(part) for part in phrase]
-                for phrase in emphasis_phrases
-            )
-            if is_emphasis:
-                # Big-face grunge stamp: the phrase repeated across three lines,
-                # semi-transparent, slightly rotated (reference look).
-                stamp_text = clean_text(raw_text, uppercase=True)
-                for line_y, rot, sx in ((520, -3, 86), (940, 2, 90), (1360, -2, 86)):
-                    stamp_tags = (
-                        "{\\an5\\fad(70,90)"
-                        f"\\pos(540,{line_y})\\fs150\\fscx{sx}\\fscy{sx}\\frz{rot:g}"
-                        "\\blur1.1\\alpha&H2E&"
-                        f"\\t(0,150,\\fscx{sx + 5}\\fscy{sx + 5}\\alpha&H20&)"
-                        "}"
-                    )
-                    events.append(dialogue(8, start, end, "Stamp", stamp_text, stamp_tags))
-                continue
-            text = clean_text(raw_text, uppercase=True)
-            # Captions always live in a fixed band ABOVE the demo card (the card now
-            # starts at y=360), 1-2 words at a time that fade in and out before the
-            # next pops — so they never sit on top of the product UI.
-            style = "EditorialYellow" if index % 2 else "EditorialWhite"
-            size = max(96, min(140, 150 - len(text) * 3))
-            # Sticker-style placement: shift the caption left/right and tilt it per
-            # beat so it roams like the reference captions instead of sitting in a
-            # dead centered band. Stays well ABOVE the demo card (card top y=360).
-            anchor_x = 540 + (index % 3 - 1) * 58
-            y = 200 + (index % 2) * 20
+        elif effective_format == "format_2_framed_face":
+            # Scene 4 — close-up head: caption sits on a black plate (the FacePlate
+            # style's opaque box), lower third. Karaoke is by COLOUR only — the
+            # spoken word turns yellow, the rest stay white, and nothing changes
+            # size, so the plate behind the line stays a steady rectangle.
+            y = 1432
+            size = 96
+            sx = fit_fscx(raw_text, size, max_px=900, cap=104)
+            pos = f"\\an5\\pos(540,{y})\\fs{size}\\fscx{sx}\\fscy100"
+            if len(chunk) <= 1:
+                text = clean_text(raw_text, uppercase=True)
+                tags = "{" + pos + "\\fad(70,80)\\1c&H0000EAFF&}"
+                events.append(dialogue(5, start, end, "FacePlate", text, tags))
+            else:
+                active = "\\1c&H0000EAFF&\\1a&H00&"
+                inactive = "\\1c&H00FFFFFF&\\1a&H00&"
+                events.extend(_karaoke_chunk_events(
+                    chunk, end, 5, "FacePlate",
+                    pos_tags=pos, active_pop=active, inactive_dim=inactive,
+                    uppercase=True,
+                ))
+        elif effective_format == "format_4_blue_demo":
+            # Sticker-style placement: small left/right shift and tilt per beat,
+            # sitting just above the demo card (closer to the picture, not pinned to
+            # the very top of the frame).
+            anchor_x = 540 + (index % 3 - 1) * 26
+            y = 250 + (index % 2) * 16
             tilt = (-2.6, 1.8, -1.4, 2.2)[index % 4]
-            tags = (
-                "{\\an5\\fad(70,80)"
-                f"\\pos({anchor_x},{y})\\fs{size}\\fscx90\\fscy82\\frz{tilt:g}"
-                "\\blur0.22\\t(0,110,\\fscx100\\fscy90\\blur0.05)"
-                "\\t(110,220,\\fscx94\\fscy86)"
-                "}"
-            )
-            events.append(dialogue(8, start, end, style, text, tags))
+            size = max(84, min(126, 134 - len(raw_text) * 2))
+            fa = fit_fscx(raw_text, size, max_px=940)
+            fi = max(40, int(fa * 0.84))
+            if len(chunk) <= 1:
+                # Single word = accent: always yellow, bigger, bold sticker.
+                text = clean_text(raw_text, uppercase=True)
+                tags = (
+                    "{\\an5\\fad(70,80)"
+                    f"\\pos({anchor_x},{y})\\fs{size}\\fscx{int(fa*0.82)}\\fscy{int(fa*0.78)}\\frz{tilt:g}"
+                    f"\\blur0.18\\t(0,110,\\fscx{fa}\\fscy{int(fa*0.94)}\\blur0.05)"
+                    f"\\t(110,220,\\fscx{int(fa*0.94)}\\fscy{int(fa*0.88)})"
+                    "}"
+                )
+                events.append(dialogue(8, start, end, "EditorialYellow", text, tags))
+            else:
+                # Multi-word karaoke: spoken word yellow + bigger, rest white.
+                pos = (
+                    f"\\an5\\pos({anchor_x},{y})\\fs{size}\\frz{tilt:g}\\blur0.10"
+                )
+                active = (
+                    f"\\1c&H0000EAFF&\\1a&H00&\\fscx{fa}\\fscy{int(fa*0.92)}"
+                    f"\\t(0,120,\\fscx{int(fa*0.95)}\\fscy{int(fa*0.88)})"
+                )
+                inactive = f"\\1c&H00FFFFFF&\\1a&H00&\\fscx{fi}\\fscy{int(fi*0.9)}"
+                events.extend(_karaoke_chunk_events(
+                    chunk, end, 8, "EditorialWhite",
+                    pos_tags=pos, active_pop=active, inactive_dim=inactive,
+                    uppercase=True,
+                ))
         else:
             # CTA closes with the same metallic hook lettering as the opening scene,
             # pinned to the top of the frame so it never covers the product demo.
             # Fixed position (no alternating y) + no underline = no flicker.
             text = clean_text(raw_text, uppercase=True)
-            size = max(82, min(150, 168 - len(text) * 4))
-            scale_x = max(55, min(90, 94 - len(text) * 2))
+            size = max(80, min(136, 156 - len(text) * 4))
+            scale_x = fit_fscx(text, size, max_px=980, cap=100)
             y = 300
             echo, main = _metal_caption_tags(size, scale_x, y)
             events.append(dialogue(3, start, end, "MetalCyan", text, echo))
@@ -801,25 +914,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 def shot_close_enable(plan: RefStyleEditPlan) -> str:
-    """Alternate framing across plain talking-head beats: medium, close, medium...
+    """Pick the close-up push-in windows.
 
-    Graphics formats (yellow frame / blue demo) already change the picture, so they
-    keep the full-frame talk layer. Among the remaining talking-head-only beats we
-    start medium (the hook) and flip to a close-up push-in on every other beat.
+    Close-up is reserved for Scene 4 (format_2, "говорящая голова крупно"). Every
+    other talking-head beat — the hook (Scene 1) and the head+lower-demo (Scene 3) —
+    stays on the wider/medium framing, so the framing alone reads which scene it is.
     """
-    plain_formats = {
-        "format_1_hook_metal",
-        "format_3_turn_badge",
-        "format_5_lower_demo_cta",
-    }
-    ranges: list[str] = []
-    plain_index = -1
-    for segment in plan.segments:
-        if segment.format_id not in plain_formats:
-            continue
-        plain_index += 1
-        if plain_index % 2 == 1:
-            ranges.append(f"between(t,{segment.start:.2f},{segment.end:.2f})")
+    ranges = [
+        f"between(t,{segment.start:.2f},{segment.end:.2f})"
+        for segment in plan.segments
+        if segment.format_id == "format_2_framed_face"
+    ]
     return "+".join(ranges) if ranges else "0"
 
 
@@ -1000,14 +1105,14 @@ def render_base(
     product_tags: list[list[str]] | None = None,
     forced_products: dict[float, str] | None = None,
     head_cutaways: bool = True,
+    bg_video: Path | None = None,  # Scene 2 blue-grid backdrop video
 ) -> None:
     products = list(product) if isinstance(product, list) else [product]
     if not products:
         raise ValueError("at least one product demo asset is required")
+    product_dims = {p: probe_dimensions(p) for p in products}
 
-    yellow_enable = enable_expr(plan, "format_2_framed_face")
     blue_enable = enable_expr(plan, "format_4_blue_demo")
-    lower_enable = enable_expr(plan, "format_5_lower_demo_cta")
     close_enable = shot_close_enable(plan)
     flash = flash_expr(plan)
     whip = whip_expr(plan)
@@ -1019,6 +1124,22 @@ def render_base(
             f"between(t,{max(0.0, c - 0.06):.2f},{c + 0.09:.2f})" for c in cut_times
         )
         whip = cut_whip if whip == "0" else f"({whip})+({cut_whip})"
+
+    # Scene-change punch (ref-style): a quick ~7% zoom-in that decays over ~6
+    # frames at every cut, so each transition lands with a snap. Done with zoompan
+    # (crop can't animate its output size). The frame is pre-upscaled 1.5x so the
+    # z=1 (no-punch) frames stay sharp — zoompan just downscales them back.
+    PUNCH_FRAMES, PUNCH_AMT = 6, 0.07
+    punch_cuts = sorted(
+        {round(seg.start, 3) for seg in plan.segments[1:] if seg.start > 0.05}
+        | {round(c, 3) for c in (cut_times or []) if c > 0.05}
+    )
+    cut_frames = sorted({int(round(c * FPS)) for c in punch_cuts})
+    punch_on = "+".join(
+        f"between(on,{cf},{cf + PUNCH_FRAMES})*({PUNCH_FRAMES}-(on-{cf}))/{PUNCH_FRAMES}"
+        for cf in cut_frames
+    ) or "0"
+    punch_zexpr = f"1+{PUNCH_AMT}*({punch_on})"
 
     # Talking-head cutaways inside long demo beats: drop the blue cover + product
     # card during these windows so the live head shows. Kept few and calm (clean
@@ -1032,6 +1153,7 @@ def render_base(
     sfx_segments = list(plan.segments[1:5])
     music_input = 1 + len(products)
     sfx_input = music_input + 1
+    bg_input = sfx_input + 1  # Scene 2 blue-grid backdrop video (added last)
     product_segments = [
         segment
         for segment in plan.segments
@@ -1048,16 +1170,31 @@ def render_base(
             if clip and clip in names:
                 product_assignment[i] = names.index(clip)
 
-    # Emphasis windows ("умный отклик") keep the blue demo background fully in
-    # place over the talking head — we only stamp the grunge headline subtitles on
-    # top. (Previously the blue cover was punched out here, exposing the raw live
-    # head behind the demo, which is not wanted.)
+    # emphasis (grunge stamp) is a retired treatment — accepted for call-site
+    # compatibility, no longer composited.
     _ = emphasis
 
     tech = build_tech_chain(source)
     talk_crop = hook_zoom_chain()
+    # Scene 2 backdrop: the user's animated blue-grid video (cover-fit to 9:16) when
+    # --bg-video is given, otherwise a generated static blue grid as a fallback.
+    if bg_video is not None:
+        blue_layer = (
+            f"[{bg_input}:v]trim=start=0:duration={duration:.3f},setpts=PTS-STARTPTS,fps={FPS},"
+            f"scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H},"
+            "setsar=1,eq=brightness=-0.015:saturation=1.05:contrast=1.02,format=yuva420p[blue]"
+        )
+    else:
+        blue_layer = (
+            # Fully opaque blue grid backdrop: the talking head must NOT show through
+            # behind the demo (previously aa=0.6 left it faintly visible at the edges).
+            f"color=c=0x21aee4:s={W}x{H}:r={FPS}:d={duration:.3f},"
+            "drawgrid=w=228:h=228:t=4:c=0xffffff@0.45,"
+            "drawbox=x=0:y=0:w=1080:h=1920:color=0x0375a9@0.14:t=fill,"
+            "noise=alls=6:allf=t+u,format=yuva420p[blue]"
+        )
     filter_parts = [
-        f"[0:v]trim=start=0:duration={duration:.3f},setpts=PTS-STARTPTS,{tech},split=2[talkSrc][frameSrc]",
+        f"[0:v]trim=start=0:duration={duration:.3f},setpts=PTS-STARTPTS,{tech}[talkSrc]",
         f"[talkSrc]{talk_crop}[talkFull]",
         "[talkFull]split=2[talkMed][talkCropSrc]",
         (
@@ -1066,65 +1203,39 @@ def render_base(
         ),
         f"[talkMed][talkClose]overlay=0:0:enable='{close_enable}'[talkComposed]",
         f"[talkComposed]{handheld_motion()}[talk]",
-        (
-            # Clean rounded photo card like the reference: the photo fills the card
-            # directly, with rounded corners and no polaroid-style cream mat.
-            "[frameSrc]"
-            "scale=872:1040:force_original_aspect_ratio=increase,"
-            "crop=872:1040,setsar=1,"
-            "eq=brightness=0.020:saturation=1.05:contrast=1.04,"
-            f"format=rgba,{rounded_alpha(872, 1040, 42)},"
-            "format=yuva420p[frame2]"
-        ),
-        (
-            # Warm cloth-like yellow backdrop: cream grid and light grain, close
-            # to the reference without heavy artificial bands. No drop shadow behind
-            # the photo card — the rounded card sits cleanly on the grid.
-            f"color=c=0xdfc52e:s={W}x{H}:r={FPS}:d={duration:.3f},"
-            "format=rgba,noise=alls=5:allf=t+u,"
-            "drawgrid=w=258:h=258:t=3:c=0xfff8d8@0.34,"
-            "format=yuva420p[yellowBg]"
-        ),
-        (
-            "[yellowBg]"
-            "drawbox=x=70:y=415:w=872:h=1040:color=0xffffff@0.08:t=2"
-            "[yellow]"
-        ),
-        (
-            # Fully opaque blue grid backdrop: the talking head must NOT show through
-            # behind the demo (previously aa=0.6 left it faintly visible at the edges).
-            f"color=c=0x21aee4:s={W}x{H}:r={FPS}:d={duration:.3f},"
-            "drawgrid=w=228:h=228:t=4:c=0xffffff@0.45,"
-            "drawbox=x=0:y=0:w=1080:h=1920:color=0x0375a9@0.14:t=fill,"
-            "noise=alls=6:allf=t+u,format=yuva420p[blue]"
-        ),
-        f"[talk][yellow]overlay=0:0:enable='{yellow_enable}'[v1]",
-        f"[v1][frame2]overlay=70:415:enable='{yellow_enable}'[v2]",
-        f"[v2][blue]overlay=0:0:enable='{blue_enable}'[v3]",
+        blue_layer,
+        # Scene 4 (format_2) is a plain close-up head — no card, no backdrop — so the
+        # composed talk layer flows straight into the blue-demo cover.
+        f"[talk][blue]overlay=0:0:enable='{blue_enable}'[v3]",
     ]
 
-    demo4_layers: list[tuple[str, RefStyleEditSegment]] = []
+    # Blue-demo card: show the product clip WHOLE (fit to its own aspect inside a
+    # max box) so no UI is cut off — it sits on the blue grid, captions above it.
+    DEMO_MAX_W, DEMO_MAX_H = 1000, 1500
+    DEMO_REGION_TOP, DEMO_REGION_H = 312, 1500  # leave a caption band up top
+    demo4_layers: list[tuple[str, RefStyleEditSegment, int, int]] = []
     demo5_layers: list[tuple[str, RefStyleEditSegment]] = []
     for index, segment in enumerate(product_segments):
         input_index = 1 + (product_assignment[index] if product_assignment else index % len(products))
         segment_duration = max(0.10, segment.end - segment.start)
         if segment.format_id == "format_4_blue_demo":
             label = f"demo4_{index}"
+            src_w, src_h = product_dims[products[input_index - 1]]
+            fw, fh = fit_dims(src_w, src_h, DEMO_MAX_W, DEMO_MAX_H)
+            ox = (W - fw) // 2
+            oy = DEMO_REGION_TOP + max(0, (DEMO_REGION_H - fh) // 2)
             filter_parts.append(
                 f"[{input_index}:v]trim=start=0:duration={segment_duration:.3f},"
                 f"setpts=PTS-STARTPTS+{segment.start:.3f}/TB,fps={FPS},"
-                # Big readable demo card: ~93% of frame width (was 820/1080) so the
-                # product UI is large enough to read. The tall vertical screen
-                # recording is fit to the card width; only the top/bottom of the
-                # over-tall frame is trimmed, centered, to fill 1000x1500.
-                "scale=1000:-2:flags=lanczos,"
-                "crop=1000:1500:0:(ih-1500)/2,setsar=1,"
-                "eq=brightness=0.020:saturation=1.04:contrast=1.03,"
-                # No frame border — just light rounded corners on the demo area.
-                f"format=rgba,{rounded_alpha(1000, 1500, 30)},"
+                # Fit (no crop): scale to the clip's own aspect within the max box so
+                # the full product UI is visible exactly as shot. Rounded corners are
+                # carved on the actual scaled size.
+                f"scale={fw}:{fh}:force_original_aspect_ratio=decrease:flags=lanczos,"
+                "setsar=1,eq=brightness=0.020:saturation=1.04:contrast=1.03,"
+                f"format=rgba,{rounded_alpha(fw, fh, 28)},"
                 f"format=yuva420p[{label}]"
             )
-            demo4_layers.append((label, segment))
+            demo4_layers.append((label, segment, ox, oy))
         else:
             label = f"demo5_{index}"
             filter_parts.append(
@@ -1140,28 +1251,34 @@ def render_base(
             demo5_layers.append((label, segment))
 
     current = "v3"
-    for index, (label, segment) in enumerate(demo4_layers):
+    for index, (label, segment, ox, oy) in enumerate(demo4_layers):
         out_label = f"v4_{index}"
-        # Card sits 50px lower so captions get a clear band above it; it is hidden
-        # during head-cutaway windows (same windows the blue cover is dropped).
+        # The card is fit-centred (per clip) with a caption band above it; it is
+        # hidden during head-cutaway windows (same windows the blue cover drops).
         demo_enable = f"between(t,{segment.start:.2f},{segment.end:.2f})"
         if cutaways:
             demo_enable = f"({demo_enable})*(1-({cutaway_expr}))"
         filter_parts.append(
-            f"[{current}][{label}]overlay=40:336:eof_action=pass:"
+            f"[{current}][{label}]overlay={ox}:{oy}:eof_action=pass:"
             f"enable='{demo_enable}'[{out_label}]"
         )
         current = out_label
     filter_parts.append(f"[{current}]format=yuva420p[v5]")
-    filter_parts.append(
-        f"[v5]drawbox=x=50:y=1160:w=980:h=650:color=0xffffff@0.14:t=fill:enable='{lower_enable}',"
-        f"drawbox=x=50:y=1160:w=980:h=650:color=0x000000@0.10:t=2:enable='{lower_enable}'[v6]"
-    )
-    current = "v6"
+    # Scene 3 — the demo block slides up from below the frame into the lower third
+    # over ~0.34s (ease-out), then rests. The rounded card itself is the "block",
+    # so nothing shows in that region before the clip arrives.
+    current = "v5"
+    SLIDE_SEC = 0.34
+    REST_Y, SLIDE_DIST = 1160, 760
     for index, (label, segment) in enumerate(demo5_layers):
         out_label = f"v7_{index}"
+        p = f"(t-{segment.start:.2f})/{SLIDE_SEC}"
+        y_expr = (
+            f"if(lt(t-{segment.start:.2f},{SLIDE_SEC}),"
+            f"{REST_Y}+{SLIDE_DIST}*pow(1-{p},2),{REST_Y})"
+        )
         filter_parts.append(
-            f"[{current}][{label}]overlay=50:1160:eof_action=pass:"
+            f"[{current}][{label}]overlay=x=50:y='{y_expr}':eof_action=pass:"
             f"enable='between(t,{segment.start:.2f},{segment.end:.2f})'[{out_label}]"
         )
         current = out_label
@@ -1170,17 +1287,25 @@ def render_base(
             f"[{current}]format=yuva420p[v7]",
             (
                 "[v7]"
+                f"scale={W * 3 // 2}:{H * 3 // 2}:flags=lanczos,"
+                f"zoompan=z='{punch_zexpr}':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                f"s={W}x{H}:fps={FPS},setsar=1,"
                 f"avgblur=sizeX=64:sizeY=1:enable='{whip}',"
-                f"drawbox=x=0:y=0:w=1080:h=1920:color=0xffffff@0.15:t=fill:enable='{flash}',"
+                f"drawbox=x=0:y=0:w=1080:h=1920:color=0xffffff@0.18:t=fill:enable='{flash}',"
                 "format=yuv420p[vout]"
             ),
             (
+                # Voice: dynaudnorm first to even out level jumps between the
+                # concatenated blocks (each clip was recorded/cleaned separately),
+                # then loudnorm to a slightly louder target, plus a small gain.
                 f"[0:a]atrim=start=0:duration={duration:.3f},asetpts=PTS-STARTPTS,"
-                "loudnorm=I=-16:TP=-1.5:LRA=11,volume=2.0dB,"
+                "dynaudnorm=f=200:g=7:p=0.9:m=10,"
+                "loudnorm=I=-14:TP=-1.5:LRA=9,"
                 "aformat=sample_rates=48000:channel_layouts=stereo[voice]"
             ),
             (
-                f"[{music_input}:a]atrim=0:{duration:.3f},asetpts=PTS-STARTPTS,volume=-28dB,"
+                # Background music — clearly audible under the voice (was -28dB).
+                f"[{music_input}:a]atrim=0:{duration:.3f},asetpts=PTS-STARTPTS,volume=-19dB,"
                 f"afade=t=in:st=0:d=0.55,afade=t=out:st={max(0.0, duration - 1.55):.2f}:d=1.1,"
                 "aformat=sample_rates=48000:channel_layouts=stereo[music]"
             ),
@@ -1201,10 +1326,10 @@ def render_base(
             sfx_labels.append(f"[{label}]")
         filter_parts.append(
             "[voice][music]" + "".join(sfx_labels)
-            + f"amix=inputs={2 + len(sfx_labels)}:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]"
+            + f"amix=inputs={2 + len(sfx_labels)}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]"
         )
     else:
-        filter_parts.append("[voice][music]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]")
+        filter_parts.append("[voice][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]")
 
     cmd = [
         "ffmpeg",
@@ -1214,16 +1339,12 @@ def render_base(
     ]
     for product_path in products:
         cmd.extend(["-stream_loop", "-1", "-i", str(product_path)])
+    cmd.extend(["-stream_loop", "-1", "-i", str(music)])
+    cmd.extend(["-stream_loop", "-1", "-i", str(sfx_swish)])
+    if bg_video is not None:
+        cmd.extend(["-stream_loop", "-1", "-i", str(bg_video)])
     cmd.extend(
         [
-            "-stream_loop",
-            "-1",
-            "-i",
-            str(music),
-            "-stream_loop",
-            "-1",
-            "-i",
-            str(sfx_swish),
             "-filter_complex",
             ";".join(filter_parts),
             "-map",
@@ -1302,6 +1423,56 @@ def burn_ass(base_path: Path, ass_path: Path, final_path: Path, fonts_dir: Path)
     run(cmd, "burn directed subtitles")
 
 
+def render_demo_intro(clip: Path, out_path: Path, *, seconds: float, music: Path) -> None:
+    """A short product-demo cold open: the clip fit-shown WHOLE on the blue grid
+    with music fading in, so it cuts cleanly into the talking-head video."""
+    src_w, src_h = probe_dimensions(clip)
+    fw, fh = fit_dims(src_w, src_h, 1000, 1560)
+    ox, oy = (W - fw) // 2, (H - fh) // 2
+    fc = ";".join(
+        [
+            f"color=c=0x21aee4:s={W}x{H}:r={FPS}:d={seconds:.3f},"
+            "drawgrid=w=228:h=228:t=4:c=0xffffff@0.45,"
+            f"drawbox=x=0:y=0:w={W}:h={H}:color=0x0375a9@0.14:t=fill,"
+            "noise=alls=6:allf=t+u,format=yuva420p[bg]",
+            f"[0:v]trim=0:{seconds:.3f},setpts=PTS-STARTPTS,fps={FPS},"
+            f"scale={fw}:{fh}:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1,"
+            "eq=brightness=0.020:saturation=1.04:contrast=1.03,"
+            f"format=rgba,{rounded_alpha(fw, fh, 28)},format=yuva420p[card]",
+            f"[bg][card]overlay={ox}:{oy}[vbg]",
+            "[vbg]format=yuv420p[vout]",
+            f"[1:a]atrim=0:{seconds:.3f},asetpts=PTS-STARTPTS,volume=-19dB,"
+            "afade=t=in:st=0:d=0.4,aformat=sample_rates=48000:channel_layouts=stereo[aout]",
+        ]
+    )
+    cmd = [
+        "ffmpeg", "-y", "-stream_loop", "-1", "-i", str(clip),
+        "-stream_loop", "-1", "-i", str(music), "-filter_complex", fc,
+        "-map", "[vout]", "-map", "[aout]", "-t", f"{seconds:.3f}", "-r", str(FPS),
+        "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+        "-x264-params", "colorprim=bt709:colormatrix=bt709:transfer=bt709",
+        "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709",
+        "-color_trc", "bt709", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart", str(out_path),
+    ]
+    run(cmd, "render product-demo cold open")
+
+
+def prepend_clip(intro: Path, main: Path, out_path: Path) -> None:
+    """Concatenate intro + main (both 1080x1920/30fps/bt709/aac) into out_path."""
+    cmd = [
+        "ffmpeg", "-y", "-i", str(intro), "-i", str(main),
+        "-filter_complex", "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]",
+        "-map", "[v]", "-map", "[a]", "-r", str(FPS),
+        "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+        "-x264-params", "colorprim=bt709:colormatrix=bt709:transfer=bt709",
+        "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709",
+        "-color_trc", "bt709", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart", str(out_path),
+    ]
+    run(cmd, "prepend cold-open intro")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, default=ROOT / "new!.MOV")
@@ -1323,6 +1494,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--music", type=Path, default=ROOT / "assets/music/provocative.mp3")
     parser.add_argument("--sfx", type=Path, default=ROOT / "assets/sounds/swoosh.mp3")
     parser.add_argument("--fonts-dir", type=Path, default=ROOT / "assets/fonts")
+    parser.add_argument(
+        "--bg-video",
+        type=Path,
+        default=None,
+        help="Looping video used as the blue backdrop of the product-demo scene "
+        "(Scene 2) instead of the generated static grid (cover-fit to 1080x1920).",
+    )
+    parser.add_argument(
+        "--intro-demo",
+        type=Path,
+        default=None,
+        help="Open the video with a short product-demo cold open on the blue grid "
+        "(this clip), then cut to the talking head.",
+    )
+    parser.add_argument(
+        "--intro-sec",
+        type=float,
+        default=2.0,
+        help="Duration of the --intro-demo cold open (seconds).",
+    )
     parser.add_argument("--clean-dir", type=Path, default=None)
     parser.add_argument(
         "--no-head-cutaways",
@@ -1340,6 +1531,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "JSON list of [{start,end,format,clip}] to force a format and/or a "
             "specific product clip on the segments inside each time range."
+        ),
+    )
+    parser.add_argument(
+        "--strict-product-overrides",
+        action="store_true",
+        help=(
+            "When product overrides are provided, disable auto product-demo "
+            "segments outside those explicit windows."
         ),
     )
     parser.add_argument(
@@ -1432,6 +1631,12 @@ def main() -> None:
         )
 
     plan = build_edit_plan(transcript, source=str(source))
+    # Extend the last beat to the true end of the video so trailing frames (e.g. a
+    # frozen CTA tail) stay covered — otherwise a product-demo overlay would vanish
+    # at the last spoken word instead of holding to the end.
+    if plan.segments and plan.segments[-1].end < plan.duration - 0.01:
+        last = plan.segments[-1].model_copy(update={"end": round(plan.duration, 3)})
+        plan = plan.model_copy(update={"segments": list(plan.segments[:-1]) + [last]})
 
     # Explicit product-insert overrides: force a format and/or a specific product
     # clip on every segment that falls inside an override's [start, end) range.
@@ -1440,6 +1645,19 @@ def main() -> None:
         from src.ref_style_director import FORMAT_SUBTITLE_MODES
 
         product_fmts = {"format_4_blue_demo", "format_5_lower_demo_cta"}
+        if args.strict_product_overrides:
+            plan = plan.model_copy(update={
+                "segments": [
+                    seg.model_copy(update={
+                        "format_id": "format_2_framed_face",
+                        "subtitle_mode": FORMAT_SUBTITLE_MODES["format_2_framed_face"],
+                        "product_demo": False,
+                    })
+                    if seg.format_id in product_fmts
+                    else seg
+                    for seg in plan.segments
+                ]
+            })
         overrides = json.loads(resolve_path(args.product_overrides).read_text(encoding="utf-8"))
         segs = list(plan.segments)
         for ov in overrides:
@@ -1528,7 +1746,8 @@ def main() -> None:
         if args.emphasis
         else EMPHASIS_PHRASES
     )
-    write_ass(ass_path, transcript, plan, emphasis_phrases=emphasis_phrases)
+    cutaways = demo_head_cutaways(plan) if not args.no_head_cutaways else []
+    write_ass(ass_path, transcript, plan, emphasis_phrases=emphasis_phrases, cutaways=cutaways)
     # Cut positions in the tightened (output) timeline = cumulative chunk durations,
     # one per join (the final chunk has no trailing cut). Used to mask head jumps.
     cut_times: list[float] = []
@@ -1553,6 +1772,7 @@ def main() -> None:
         product_tags=product_tags,
         forced_products=forced_products,
         head_cutaways=not args.no_head_cutaways,
+        bg_video=resolve_path(args.bg_video) if args.bg_video else None,
     )
     # Record which clip landed on which demo line (for QA / review of sync).
     _demo_segments = [
@@ -1575,6 +1795,17 @@ def main() -> None:
         for i, seg in enumerate(_demo_segments)
     ]
     burn_ass(base_path, ass_path, output, fonts_dir)
+
+    # Cold open: prepend a short product-demo intro on the blue grid, then the
+    # talking head — "the video starts with a 2s demo, then the head".
+    if args.intro_demo:
+        intro_clip = resolve_path(args.intro_demo)
+        intro_path = output.with_name(f"{output.stem}_intro.mp4")
+        render_demo_intro(intro_clip, intro_path, seconds=args.intro_sec, music=music)
+        combined = output.with_name(f"{output.stem}_combined.mp4")
+        prepend_clip(intro_path, output, combined)
+        shutil.move(str(combined), str(output))
+
     diagnostics_path.write_text(
         json.dumps(
             {

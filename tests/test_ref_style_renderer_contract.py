@@ -72,8 +72,9 @@ def test_format_4_ass_uses_editorial_yellow_white_instead_of_red(tmp_path: Path)
     ass = ass_path.read_text(encoding="utf-8")
     assert "PosterRed" not in ass
     assert "&H000000F6" not in ass
-    assert "EditorialYellow" in ass
-    assert "&H0000F5FF" in ass
+    # Accent word is yellow, the rest stay white (no red).
+    assert "&H0000EAFF" in ass  # yellow accent
+    assert "&H00FFFFFF" in ass  # white non-accent
 
 
 def test_hook_words_do_not_overlap_on_screen(tmp_path: Path) -> None:
@@ -247,7 +248,9 @@ def test_scene_5_blur_is_limited_to_demo_area() -> None:
     assert "boxblur=0.4:1" in filter_complex
 
 
-def test_yellow_scene_uses_reference_card_geometry_without_polaroid_mat() -> None:
+def test_scene4_framed_face_is_a_plain_closeup_without_card_or_backdrop() -> None:
+    # Scene 4 is now "говорящая голова крупно": a full-frame close-up head, no photo
+    # card and no yellow/video backdrop. The old framed-card composition is retired.
     plan = RefStyleEditPlan(
         source="new!.MOV",
         duration=4.0,
@@ -269,13 +272,43 @@ def test_yellow_scene_uses_reference_card_geometry_without_polaroid_mat() -> Non
 
     cmd = run.call_args.args[0]
     filter_complex = cmd[cmd.index("-filter_complex") + 1]
-    assert "crop=872:1040" in filter_complex
-    assert "pad=868:1118" not in filter_complex
-    assert "[v1][frame2]overlay=70:415" in filter_complex
-    # The yellow card sits cleanly on the grid: no drop shadow / dark backing layer.
-    assert "yellowShadow" not in filter_complex
-    assert "drawbox=x=0:y=1440:w=1080:h=480" not in filter_complex
-    assert "drawbox=x=732:y=0:w=42:h=1920" not in filter_complex
+    # No photo card, no yellow grid backdrop, no frame overlay.
+    assert "crop=872:1040" not in filter_complex
+    assert "[frame2]" not in filter_complex
+    assert "0xdfc52e" not in filter_complex  # the old yellow grid colour
+    assert "[talk][yellow]" not in filter_complex
+    # The composed head flows straight into the (unused-here) blue cover layer.
+    assert "[talk][blue]overlay=0:0" in filter_complex
+    # The head is shown close — the close-up push-in is enabled across the beat.
+    assert "[talkMed][talkClose]overlay=0:0:enable='between(t,0.00,4.00)'" in filter_complex
+
+
+def test_blue_demo_card_fits_product_clip_whole_without_cropping() -> None:
+    plan = RefStyleEditPlan(
+        source="new!.MOV",
+        duration=3.0,
+        segments=[
+            _segment(0.0, 3.0, "format_4_blue_demo", "product_demo", "ats"),
+        ],
+    )
+
+    with patch.object(renderer, "run") as run:
+        renderer.render_base(
+            Path("base.mp4"),
+            source=Path("clean.mp4"),
+            product=Path("product.mov"),
+            music=Path("music.mp3"),
+            sfx_swish=Path("swoosh.mp3"),
+            duration=3.0,
+            plan=plan,
+        )
+
+    cmd = run.call_args.args[0]
+    filter_complex = cmd[cmd.index("-filter_complex") + 1]
+    # The product clip is shown WHOLE (fit to its own aspect), never centre-cropped,
+    # so no UI is cut off. A 2:3 source fits the 1000x1500 box exactly.
+    assert "force_original_aspect_ratio=decrease" in filter_complex
+    assert "crop=1000:1500:(iw-1000)/2:(ih-1500)/2" not in filter_complex
 
 
 def test_product_demo_sequence_uses_multiple_inputs_for_demo_segments() -> None:

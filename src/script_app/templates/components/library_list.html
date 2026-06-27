@@ -1,0 +1,35 @@
+<div class="list">
+  {% for row in rows %}
+  <div class="item">
+    <a class="item-main" href="/scripts/{{ row.id }}">
+      <span class="title">{{ row.title }}</span>
+      <span class="meta">
+        {% if row.item_type == 'generated_video' %}
+          {{ funnel_stage_labels.get(row.funnel_stage, row.funnel_stage) }} · {{ cta_type_labels.get(row.cta_type, row.cta_type) }}
+        {% elif row.item_type == 'challenge_episode' %}
+          {{ row.episode_label }} · день {{ row.day_number or '—' }}
+        {% elif row.item_type == 'image_explainer' %}
+          {{ row.core_topic or 'без темы' }} · {{ row.series_key or 'без серии' }}
+        {% else %}
+          {{ backlog_status_labels.get(row.status, row.status) }} · {{ row.category or 'без категории' }} · {{ challenge_direction_labels.get(row.challenge_pillar, row.challenge_pillar) or 'без направления' }}
+          {% if row.return_window %} · {{ row.return_window }}{% endif %}
+          {% if row.source_episode_label %} · из {{ row.source_episode_label }}{% endif %}
+        {% endif %}
+      </span>
+    </a>
+    <form class="status-form auto-submit" method="post" action="/scripts/{{ row.id }}/status">
+      <input type="hidden" name="next" value="{{ request.url.path }}?{{ request.url.query }}">
+      <select name="status" aria-label="Статус">
+        {% for option in status_options %}
+        <option value="{{ option }}" {{ 'selected' if row.status == option else '' }}>
+          {% if row.item_type == 'challenge_backlog' %}{{ backlog_status_labels.get(option, option) }}{% else %}{{ status_labels.get(option, option) }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      <noscript><button>Сохранить</button></noscript>
+    </form>
+  </div>
+  {% else %}
+  <p class="empty">{{ empty_text or 'Пока пусто. Запусти seed-команды или создай сценарий.' }}</p>
+  {% endfor %}
+</div>

@@ -54,10 +54,34 @@ request to a route by the **"User says (RU)"** trigger phrases.
 | 3 | **Демо продукта** (Ref-style directed, `custom_graphics`) — *WIP* | Turn a transcript into a directed montage across **5 visual formats** with product b-roll, burned captions, music. | «сделай видео с демо продукта», «собери демо» | `python pipelines/render_ref_style_directed.py` |
 | 4 | **Много рилсов** (Reel Matrix) — *WIP* | Shoot interchangeable hook/tip/cta blocks and mix them into many unique videos (combinatorial, on top of #2+#3). | «сделай серию рилсов из файлов», «собери серию рилсов», «нужно много вариантов», «перемешай вступления и концовки» | `python pipelines/reel_matrix.py` |
 | 5 | **Динамичный рилс** (3-strip) | Three horizontal clips stacked in one 9:16 frame, asynchronous cascade. Config-driven; great for "a day of footage". | «собери динамичный рилс», «три клипа в одном кадре из сегодняшних видео» | `zsh pipelines/three_strip/build_3strip.zsh episodes/<name>.conf` |
-| — | **QA** | Gate a finished video (format, dead air, HDR wash, captions, loudness). Not a route — a check. | — | `python pipelines/qa_ref_style.py` (ref-style) · `three_strip/qa.py` (3-strip) |
+| — | **QA** | Gate a finished video (format, dead air, HDR wash, captions, loudness, duplicate takes). Not a route — a check. | — | `python pipelines/qa_talking_head.py --slug <slug>` (talking-head: per-clip cut timing + duplicate-phrase check) · `python pipelines/qa_ref_style.py` (ref-style) · `three_strip/qa.py` (3-strip) |
 
 Routes **#3 (Демо продукта)** and **#4 (Много рилсов)** are *work-in-progress* —
 usable but not yet stable; tell the user so if they pick one.
+
+**Feeding route #2 (Говорящая голова) — clip ingestion rules:**
+- A day's footage is usually **several clips** (the person stops/restarts the
+  camera). Pass **each clip as its own `--input`**, or point `--clips-dir
+  <folder>` at the day folder (it ingests every video inside, sorted, as a
+  separate source). **Never `ffmpeg -f concat -c copy` them into one file** —
+  iPhone clips in a day often have **mixed rotation** (talking parts `90`,
+  screen/demo parts `-90`), and stream-copy concat forces the first clip's
+  rotation onto all, flipping the odd ones **upside-down**. The pipeline
+  auto-rotates each source independently and logs a per-clip rotation table on
+  start; eyeball a frame from each demo segment after rendering.
+- **Silent demo/screen clips** (pointing the phone at a laptop, no narration)
+  get trimmed away by silence detection. To play one end-to-end, pass
+  `--keep-full-source <index>` (0-based, in input order; repeatable) — it skips
+  trimming/retakes for that clip and renders it as one un-cropped beat.
+- `--retake-mode smart` can over-cut: it sometimes reads a real continuous
+  thought as a false start and drops several seconds mid-sentence. The pipeline
+  prints a `⚠ retake removal dropped …` warning when this happens — review it,
+  and if a real sentence was cut, re-render with `--retake-mode off` or an
+  explicit `--edit-decisions-json` plan.
+- **Subtitle vocabulary** is auto-corrected from `config.yaml →
+  subtitle_corrections` before burning (e.g. `рилз`→`рилс`, `сас`→`SaaS`, plus
+  your own product/brand terms). Add recurring Whisper mis-hears there
+  instead of hand-editing `subtitles.ass`.
 
 **«Добавь заголовок челленджа»** (talking-head add-on): when the user asks to add a
 challenge title, they have an exported **animated title clip** — text on a **black
@@ -66,6 +90,13 @@ background**, 1080×1920, text pre-positioned top-left. Sort it into `assets/tit
 The pipeline keys out the black background, overlays the title onto the **start** of
 the video, and fades it out at its end — producing an extra `final_titled.mp4`
 (subtitles stay at the bottom). Keying/fade defaults: `config.yaml → title_overlay`.
+
+**Auto-title for a recurring titled series.** When a talking-head render belongs to a
+recurring series that always carries the same opener title, pass `--auto-title` to
+overlay `config.yaml → title_overlay.default_title` (currently
+`assets/titles/title_001.mp4`) without being asked. An explicit `--title <file>`
+overrides it. To change the series title, drop the new clip into `assets/titles/` and
+update `title_overlay.default_title` (one line). The titled output is `final_titled.mp4`.
 
 The **5 ref-style formats**: `hook_metal` → `framed_face` → `turn_badge` →
 `blue_demo` → `lower_demo_cta` (semantic order, not a fixed rotation).

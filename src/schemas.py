@@ -1049,6 +1049,10 @@ class TitleOverlayConfig(BaseModel):
     colorkey_similarity: float = 0.10
     colorkey_blend: float = 0.08
     fade_out_sec: float = 0.36
+    # Default challenge-title clip, overlaid automatically when --auto-title is
+    # set (used for challenge-day videos so the title is added without a reminder).
+    # None = no default; an explicit --title always wins.
+    default_title: Optional[str] = None
 
 
 class Config(BaseModel):
@@ -1072,5 +1076,6 @@ class Config(BaseModel):
     title_overlay: TitleOverlayConfig = TitleOverlayConfig()
     annotation: AnnotationConfig = AnnotationConfig()
     subtitle_styles: dict[str, SubtitleStyle]
+    subtitle_corrections: dict[str, str] = Field(default_factory=dict)
     whisper: WhisperConfig = WhisperConfig()
     tts: TTSConfig = TTSConfig()

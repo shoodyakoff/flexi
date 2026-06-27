@@ -24,7 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import permutations
 from pathlib import Path
 
@@ -36,7 +36,18 @@ for _p in (str(ROOT), str(ROOT / "src")):
 from src.output_paths import versioned_dir
 
 RAW_DIR = ROOT / "raw"
+BRAND_DIR = ROOT / "assets/broll_brand"  # screen-demo clip library + demo_tags.json
 W, H, FPS = 1080, 1920, 30
+# Every product-demo insert must hold at least this long — no one-second flashes.
+# If a block can't fit all its demos at this minimum, the shortest are dropped and
+# the rest split the window evenly (each still >= MIN_DEMO_SEC).
+MIN_DEMO_SEC = 2.0
+# CTA product demo: holds ~3s after a brief talking-head lead. If the CTA block is
+# too short to afford the full hold, the last frame is frozen for the remainder.
+CTA_DEMO_SEC = 3.0
+# Each block is trimmed to its last spoken word + this tail, dropping the dead air
+# a clip leaves before the cut to the next block (no silent micro-lag at joins).
+TAIL_PAD = 0.12
 VIDEO_EXTS = {".mp4", ".mov", ".m4v"}
 
 # ---------------------------------------------------------------------------
@@ -246,7 +257,7 @@ def detect_silences(path: Path, *, noise="-30dB", d=0.28) -> list[tuple[float, f
 def clean_clip(src: Path, out_video: Path, out_transcript: Path, *, model="large-v3") -> None:
     """Silence-cut + HDR tonemap + vertical 1080x1920 + re-transcribe one block."""
     dur = probe_duration(src)
-    segs = speech_segments_from_silences(detect_silences(src), dur)
+    segs = speech_segments_from_silences(detect_silences(src), dur, tail_pad=0.5)
     if not segs:
         segs = [(0.0, dur)]
     fc = build_clean_filter(segs, hdr=is_hdr(src))
@@ -276,8 +287,23 @@ class Block:
     reason: str
     text: str = ""
     key: str = ""        # short id, e.g. h1 / t2 / c3
-    product: str = ""    # optional product clip to insert on this block (e.g. sa_2_demo.mp4)
-    product_from: str = ""  # delay the demo until this word is spoken (e.g. "сопроводительн")
+    product: str = ""    # legacy single insert: product clip to show on this block
+    product_from: str = ""  # legacy: delay that single demo until this word is spoken
+    # Preferred: a SEQUENCE of screen-demo inserts within one block, each
+    # {"clip": "demo_x.mp4", "from": "<trigger word>"}. Each insert plays from its
+    # trigger word until the next insert's trigger (or the block's end). Lets a long
+    # block walk through several product screens synced to what is being said.
+    inserts: list = field(default_factory=list)
+    # Optional per-block scene split: a list of {"from": "<trigger word>",
+    # "format": "<format_id>"} that forces a subtitle/scene format from that spoken
+    # word onward (until the next override's trigger or the block end). Lets one
+    # block switch styles mid-sentence — e.g. keep the close-up plate on the first
+    # phrase, then flip the rest to the dynamic hook style on the wide shot.
+    scene_overrides: list = field(default_factory=list)
+    # CTA blocks only: the screen-demo clip to slide up at the close (Scene 3). Set
+    # it only on CTAs where a product demo fits (e.g. "попробовать бесплатно"); a
+    # CTA without it stays a plain talking-head closer (Scene 1).
+    cta_demo: str = ""
 
 
 def load_manifest(raw: Path) -> list[Block]:
@@ -357,14 +383,25 @@ def cmd_dryrun(args: argparse.Namespace) -> int:
     return 0
 
 
-def _concat_clips(clips: list[Path], out_video: Path) -> None:
-    """Concatenate already-normalized (1080x1920/30fps/bt709/aac) clips."""
+def _concat_clips(clips: list[Path], out_video: Path, durs: list[float] | None = None) -> None:
+    """Concatenate already-normalized (1080x1920/30fps/bt709/aac) clips.
+
+    If ``durs`` is given, each clip is trimmed to ``durs[i]`` seconds first — used to
+    drop trailing silence so there is no dead air before the cut to the next block."""
     inputs: list[str] = []
     for c in clips:
         inputs += ["-i", str(c)]
     n = len(clips)
-    streams = "".join(f"[{i}:v][{i}:a]" for i in range(n))
-    fc = f"{streams}concat=n={n}:v=1:a=1[v][a]"
+    if durs:
+        parts = []
+        for i in range(n):
+            parts.append(f"[{i}:v]trim=0:{durs[i]:.3f},setpts=PTS-STARTPTS[v{i}]")
+            parts.append(f"[{i}:a]atrim=0:{durs[i]:.3f},asetpts=PTS-STARTPTS[a{i}]")
+        streams = "".join(f"[v{i}][a{i}]" for i in range(n))
+        fc = ";".join(parts) + ";" + f"{streams}concat=n={n}:v=1:a=1[v][a]"
+    else:
+        streams = "".join(f"[{i}:v][{i}:a]" for i in range(n))
+        fc = f"{streams}concat=n={n}:v=1:a=1[v][a]"
     cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", fc, "-map", "[v]", "-map", "[a]",
            "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-r", str(FPS),
            "-x264-params", "colorprim=bt709:colormatrix=bt709:transfer=bt709",
@@ -374,6 +411,45 @@ def _concat_clips(clips: list[Path], out_video: Path) -> None:
     res = _run(cmd)
     if res.returncode != 0:
         raise RuntimeError("concat ffmpeg failed\n" + res.stderr[-2000:])
+
+
+def _trim_end(clip: Path, dur: float, *, noise: str = "-35dB",
+              min_sil: float = 0.3, pad: float = TAIL_PAD) -> float:
+    """Where to cut the clip: just after the last speech, dropping only the trailing
+    silence. Measured with silencedetect (real audio), so a word is never clipped —
+    unlike trusting Whisper word-end times, which land early and cut the last word."""
+    res = _run(["ffmpeg", "-hide_banner", "-i", str(clip),
+                "-af", f"silencedetect=n={noise}:d={min_sil}", "-f", "null", "-"])
+    out = res.stderr or ""
+    starts = re.findall(r"silence_start:\s*(-?[0-9.]+)", out)
+    ends = re.findall(r"silence_end:\s*([0-9.]+)", out)
+    trailing = None
+    if len(starts) > len(ends):              # silence runs to EOF (no closing end)
+        trailing = float(starts[-1])
+    elif ends and starts and float(ends[-1]) >= dur - 0.05:  # closing end at EOF
+        trailing = float(starts[-1])
+    if trailing is not None and trailing > 0.2:
+        return min(dur, round(trailing + pad, 3))
+    return dur
+
+
+def _resolve_audio(folder: Path, placeholder: Path, *, seconds: float) -> Path:
+    """First real audio file in *folder*, else a generated silent placeholder.
+
+    The ref-style renderer needs a music + sfx input; its hard-coded defaults
+    (provocative.mp3 / swoosh.mp3) may not exist. So we use whatever the user
+    dropped in assets/music | assets/sounds, and fall back to silence so a sample
+    still renders. Drop a real track and it is picked up automatically.
+    """
+    for ext in (".mp3", ".m4a", ".wav", ".aac"):
+        hits = sorted(folder.glob(f"*{ext}"))
+        if hits:
+            return hits[0]
+    if not placeholder.exists():
+        placeholder.parent.mkdir(parents=True, exist_ok=True)
+        _run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+              "-t", f"{seconds:.2f}", "-c:a", "libmp3lame", "-b:a", "128k", str(placeholder)])
+    return placeholder
 
 
 def cmd_build(args: argparse.Namespace) -> int:
@@ -390,7 +466,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         clips.append(cleaned / f"{stem}.mp4")
         trs.append(Transcript.model_validate_json(
             (cleaned / f"{stem}.transcript.json").read_text(encoding="utf-8")))
-    clip_durs = [probe_duration(c) for c in clips]
+    # Trim each block's trailing silence (measured from the real audio) so no dead air
+    # is left before the cut to the next block — without ever clipping the last word.
+    clip_durs = [_trim_end(c, probe_duration(c)) for c in clips]
     tag = "_".join(keys)
     # All working artifacts (assembly, render sidecars: base/ass/plan/diagnostics)
     # live in work/. Only the finished mp4 is delivered to a clean final/ folder.
@@ -398,38 +476,142 @@ def cmd_build(args: argparse.Namespace) -> int:
     work.mkdir(parents=True, exist_ok=True)
     assembled = work / f"asm_{tag}.mp4"
     merged_t = work / f"asm_{tag}.transcript.json"
-    _concat_clips(clips, assembled)
-    merged_t.write_text(
-        merge_transcripts(trs, clip_durs).model_dump_json(indent=2), encoding="utf-8")
-    # Per-block product inserts: place an override at each block's start time. Tip
+    _concat_clips(clips, assembled, clip_durs)
+    # Merged transcript object — its duration may grow if the CTA needs a tail
+    # freeze, so we write it after the override loop below.
+    mt = merge_transcripts(trs, clip_durs)
+    # Per-block product inserts: place an override per demo on each block. Tip
     # blocks are forced to the blue demo format; cta blocks keep their format.
+    # A block may carry a SEQUENCE (b.inserts) — each demo plays from its trigger
+    # word until the next trigger (or block end) — or the legacy single product.
+    def _word_offset(tr, trigger: str) -> float:
+        kw = (trigger or "").lower().replace("ё", "е")
+        if kw:
+            for w in tr.words:
+                if kw in w.word.lower().replace("ё", "е"):
+                    return float(w.start)
+        return 0.0
+
     overrides: list[dict] = []
     start = 0.0
     for k, dur, tr in zip(keys, clip_durs, trs):
         b = blocks[k]
-        if b.product:
-            demo_start = start
-            if b.product_from:
-                kw = b.product_from.lower().replace("ё", "е")
-                for w in tr.words:
-                    if kw in w.word.lower().replace("ё", "е"):
-                        demo_start = start + float(w.start)
-                        break
+        fmt = "format_4_blue_demo" if b.role == "tip" else None
+        seq = list(b.inserts) if b.inserts else (
+            [{"clip": b.product, "from": b.product_from}] if b.product else [])
+        # Resolve each insert's absolute start (its trigger word), then enforce the
+        # 2-second minimum: drop the shortest demos that don't fit and split the
+        # window [first trigger .. block end] evenly among the survivors.
+        resolved = sorted(
+            ((start + _word_offset(tr, ins.get("from", "")), ins["clip"]) for ins in seq),
+            key=lambda x: x[0],
+        )
+        if resolved:
+            block_end = start + dur
+            win_start = resolved[0][0]
+            avail = max(0.0, block_end - win_start)
+            keep = max(1, min(len(resolved), int(avail // MIN_DEMO_SEC)))
+            survivors = resolved
+            if keep < len(resolved):
+                natural = [
+                    (resolved[i + 1][0] if i + 1 < len(resolved) else block_end) - resolved[i][0]
+                    for i in range(len(resolved))
+                ]
+                drop = set(sorted(range(len(resolved)), key=lambda i: natural[i])[: len(resolved) - keep])
+                survivors = [r for i, r in enumerate(resolved) if i not in drop]
+            seg_len = avail / len(survivors)
+            for j, (_, clip) in enumerate(survivors):
+                demo_start = win_start + j * seg_len
+                demo_end = block_end if j + 1 == len(survivors) else win_start + (j + 1) * seg_len
+                overrides.append({
+                    "start": round(demo_start, 3),
+                    "end": round(demo_end, 3),
+                    "format": fmt,
+                    "clip": clip,
+                })
+        # Per-block scene split: force a subtitle/scene format from a trigger word
+        # onward (each runs until the next override's trigger, or the block end).
+        so_seq = sorted(
+            ((start + _word_offset(tr, so.get("from", "")), so["format"])
+             for so in (b.scene_overrides or [])),
+            key=lambda x: x[0],
+        )
+        for i, (so_start, so_fmt) in enumerate(so_seq):
+            so_end = so_seq[i + 1][0] if i + 1 < len(so_seq) else start + dur
             overrides.append({
-                "start": round(demo_start, 3),
+                "start": round(so_start, 3),
+                "end": round(so_end, 3),
+                "format": so_fmt,
+            })
+        # Hook: always Scene 1 (dynamic word-stickers). The heuristic director can
+        # mis-label a longer hook as the close-up plate, so pin the whole block.
+        if b.role == "hook":
+            overrides.append({
+                "start": round(start, 3),
                 "end": round(start + dur, 3),
-                "format": "format_4_blue_demo" if b.role == "tip" else None,
-                "clip": b.product,
+                "format": "format_1_hook_metal",
+            })
+        # CTA: the product demo fills the closing seconds, and the video ends exactly
+        # when the speech stops — NO frozen tail. The demo slides up CTA_DEMO_SEC
+        # before the block ends (Scene 3, head + lower demo), clamped to the block
+        # start so it never eats into the previous block. If the CTA replica is
+        # shorter than CTA_DEMO_SEC, the demo simply fills the whole CTA.
+        if b.role == "cta" and dur > 1.0:
+            cta_clip = b.cta_demo or "demo_landing.mp4"
+            cta_end = start + dur
+            demo_start = max(start, round(cta_end - CTA_DEMO_SEC, 3))
+            if demo_start > start + 0.05:  # room for a brief talking-head lead
+                overrides.append({
+                    "start": round(start, 3),
+                    "end": demo_start,
+                    "format": "format_1_hook_metal",
+                })
+            overrides.append({
+                "start": demo_start,
+                "end": round(cta_end, 3),
+                "format": "format_5_lower_demo_cta",
+                "clip": cta_clip,
             })
         start += dur
+    merged_t.write_text(mt.model_dump_json(indent=2), encoding="utf-8")
     render_out = work / f"{tag}.mp4"  # sidecars land next to this, inside work/
     render = [sys.executable, str(ROOT / "pipelines/render_ref_style_directed.py"),
               "--source", str(assembled), "--transcript", str(merged_t),
               "--skip-clean-prelayer", "--no-version", "--output", str(render_out)]
+    # Make the whole screen-demo library available to the renderer so (a) forced
+    # per-block inserts (override "clip") resolve to a real file, and (b) any
+    # non-forced product beat is picked by keyword from demo_tags.json. The render
+    # only globs nothing on its own (default_product_paths is stale), so we pass it.
+    demo_clips = sorted(BRAND_DIR.glob("demo_*.mp4"))
+    for clip in demo_clips:
+        render += ["--product", str(clip)]
+    demo_tags = BRAND_DIR / "demo_tags.json"
+    if demo_tags.exists():
+        render += ["--demo-tags", str(demo_tags)]
+    # Music + sfx: real files if the user dropped any, else a silent placeholder
+    # so the sample still renders (swap real music in later via assets/music).
+    total_dur = sum(clip_durs)
+    music = _resolve_audio(ROOT / "assets/music", work / "_placeholder_music.mp3",
+                           seconds=total_dur + 5)
+    sfx = _resolve_audio(ROOT / "assets/sounds", work / "_placeholder_sfx.mp3", seconds=0.5)
+    render += ["--music", str(music), "--sfx", str(sfx)]
+    # Steady product demos: never flash to the live head mid-demo (each demo holds
+    # its 2-3 seconds — see MIN_DEMO_SEC and the override builder above).
+    render += ["--no-head-cutaways"]
+    # Replace the yellow framed-face backdrop with the user's looping bg video.
+    # Prefer the compact pre-trimmed copy over the heavy raw background.mp4.
+    bg_video = next(
+        (p for p in (ROOT / "assets/backgrounds/bg_main.mp4", ROOT / "background.mp4") if p.exists()),
+        None,
+    )
+    if bg_video is not None:
+        render += ["--bg-video", str(bg_video)]
+    # No global cold-open: the video opens straight on the hook (Scene 1). The demo
+    # teaser belongs inside a fragment, not as a pre-hook intro.
     if overrides:
         ov_path = work / f"asm_{tag}.product_overrides.json"
         ov_path.write_text(json.dumps(overrides, ensure_ascii=False, indent=2), encoding="utf-8")
-        render += ["--product-overrides", str(ov_path)]
+        render += ["--product-overrides", str(ov_path), "--strict-product-overrides"]
     import os
     env = {**os.environ, "PYTHONPATH": f"{ROOT}/src:{ROOT}", "PYTHONDONTWRITEBYTECODE": "1"}
     res = subprocess.run(render, cwd=ROOT, text=True, capture_output=True, env=env)
@@ -441,6 +623,99 @@ def cmd_build(args: argparse.Namespace) -> int:
     final.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(render_out, final)
     print(final)
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Publish: collect latest renders into one flat folder + a status tracker
+# ---------------------------------------------------------------------------
+# The intended matrix for this project: 3 hooks x 2 main-part orders (t1 fixed in
+# the middle, t2/t3 swap) x 3 CTAs = 18 unique videos.
+MATRIX_HOOKS = ["h1", "h2", "h3"]
+MATRIX_ORDERS = [["t2", "t1", "t3"], ["t3", "t1", "t2"]]
+MATRIX_CTAS = ["c1", "c2", "c3"]
+
+
+def matrix_combos() -> list[str]:
+    return [f"{h}_{'_'.join(o)}_{c}"
+            for h in MATRIX_HOOKS for o in MATRIX_ORDERS for c in MATRIX_CTAS]
+
+
+def _latest_version(combo_dir: Path) -> Path | None:
+    vs = [(int(p.name[1:]), p) for p in combo_dir.glob("v*")
+          if p.is_dir() and p.name[1:].isdigit()]
+    return max(vs)[1] if vs else None
+
+
+def _read_published(md_path: Path) -> set[str]:
+    """Keep the user's [x] «выложено» ticks across re-publishes."""
+    if not md_path.exists():
+        return set()
+    pub: set[str] = set()
+    for line in md_path.read_text(encoding="utf-8").splitlines():
+        if "[x]" in line.lower():
+            m = re.search(r"(h\d_t\d_t\d_t\d_c\d)", line)
+            if m:
+                pub.add(m.group(1))
+    return pub
+
+
+def _write_matrix_doc(md_path: Path, combos: list[str],
+                      generated: dict[str, str], published: set[str]) -> None:
+    n_gen = sum(1 for t in combos if t in generated)
+    n_pub = sum(1 for t in combos if t in published)
+    lines = [
+        "# Матрица сборки — статус",
+        "",
+        f"**Готово видео: {n_gen} / {len(combos)}** · **выложено: {n_pub} / {len(combos)}**",
+        "",
+        "Все собранные ролики (последние версии) лежат плоско в папке **`готовые/`** —",
+        "бери файл `<комбо>.mp4` и выкладывай, по подпапкам ходить не нужно.",
+        "",
+        "Порядок основы: **A** = анализ→ХАХА→адаптация (`t2,t1,t3`), "
+        "**B** = адаптация→ХАХА→анализ (`t3,t1,t2`).",
+        "",
+        "Как отмечать выложенное: поставь `x` в скобках в колонке «Выложено» "
+        "(`[ ]` → `[x]`) — это сохранится при следующей пересборке.",
+        "",
+        "| № | Комбо | Хук | Осн. | CTA | Сгенерировано | Выложено |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for i, tag in enumerate(combos, 1):
+        p = tag.split("_")  # h1 t2 t1 t3 c1
+        order = "A" if p[1] == "t2" else "B"
+        gen = f"✅ {generated[tag]}" if tag in generated else "—"
+        pub = "[x]" if tag in published else "[ ]"
+        lines.append(f"| {i} | `{tag}` | {p[0]} | {order} | {p[-1]} | {gen} | {pub} |")
+    lines.append("")
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    """Copy each combo's latest render into a flat `готовые/` folder and refresh the
+    status tracker (preserving which videos you've already marked as posted)."""
+    d = args.dir
+    final = d / "final"
+    ready = d / "готовые"
+    ready.mkdir(parents=True, exist_ok=True)
+    combos = matrix_combos()
+    generated: dict[str, str] = {}
+    for tag in combos:
+        cdir = final / tag
+        if not cdir.is_dir():
+            continue
+        latest = _latest_version(cdir)
+        if latest is None:
+            continue
+        src = latest / f"{tag}.mp4"
+        if src.exists():
+            shutil.copy2(src, ready / f"{tag}.mp4")
+            generated[tag] = latest.name
+    published = _read_published(d / "МАТРИЦА.md") & set(combos)
+    _write_matrix_doc(d / "МАТРИЦА.md", combos, generated, published)
+    print(f"готовые: {ready}  ({len(generated)}/{len(combos)} собрано, "
+          f"{len(published)} выложено)")
+    print(f"трекер:  {d / 'МАТРИЦА.md'}")
     return 0
 
 
@@ -469,6 +744,11 @@ def main() -> int:
     p.add_argument("--combo", required=True, help="ordered block keys, e.g. 'h1,t3,t1,t2,c2'")
     p.add_argument("--output", type=Path, default=None)
     p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("publish", help="copy latest renders into a flat готовые/ folder + refresh МАТРИЦА.md status")
+    p.add_argument("--dir", type=Path, default=ROOT / "output" / "matrix",
+                   help="folder with final/ renders")
+    p.set_defaults(func=cmd_publish)
 
     args = ap.parse_args()
     return args.func(args)

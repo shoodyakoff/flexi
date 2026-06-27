@@ -116,6 +116,38 @@ def _strip_non_connecting_punctuation(text: str) -> str:
     return "".join(chars)
 
 
+_CORRECTION_SPLIT_RE = re.compile(r"^(\W*)(.*?)(\W*)$", re.UNICODE)
+
+
+def apply_word_corrections(text: str, corrections: dict[str, str]) -> str:
+    """Replace a single transcript word with its corrected spelling.
+
+    Matching is whole-token and case-insensitive on the word's alphanumeric
+    core, so surrounding whitespace/punctuation is preserved and substrings are
+    never touched (e.g. "код"→"Клод" does not affect "кодер"). Used to fix
+    recurring Whisper mis-hears of domain terms before subtitles are rendered.
+    """
+    if not corrections or not text:
+        return text
+    match = _CORRECTION_SPLIT_RE.match(text)
+    if match is None:
+        return text
+    prefix, core, suffix = match.group(1), match.group(2), match.group(3)
+    if not core:
+        return text
+    replacement = corrections.get(core.casefold())
+    if replacement is None:
+        return text
+    return f"{prefix}{replacement}{suffix}"
+
+
+def build_corrections_map(corrections: dict[str, str] | None) -> dict[str, str]:
+    """Casefold the configured correction keys once for whole-token lookups."""
+    if not corrections:
+        return {}
+    return {str(key).casefold(): str(value) for key, value in corrections.items()}
+
+
 @dataclass(frozen=True)
 class _ChunkLayout:
     display_text: str

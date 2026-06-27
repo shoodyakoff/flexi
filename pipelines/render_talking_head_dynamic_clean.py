@@ -98,6 +98,7 @@ class EditChunk:
     plan: str
     transition: str
     broll: str | None = None
+    video_transform: str | None = None
 
 
 def run(cmd: list[str], label: str, *, capture: bool = False) -> subprocess.CompletedProcess[str]:
@@ -126,6 +127,57 @@ def ffprobe_duration(path: Path) -> float:
         capture=True,
     )
     return float(result.stdout.strip())
+
+
+def probe_rotation(path: Path) -> int:
+    """Display rotation (degrees) from the clip's rotation side-data, or 0."""
+    result = run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream_side_data=rotation",
+            "-of",
+            "json",
+            str(path),
+        ],
+        f"probe rotation {path.name}",
+        capture=True,
+    )
+    try:
+        streams = json.loads(result.stdout).get("streams", [])
+        for side_data in streams[0].get("side_data_list", []) if streams else []:
+            if "rotation" in side_data:
+                return int(float(side_data["rotation"]))
+    except (json.JSONDecodeError, ValueError, IndexError, KeyError):
+        return 0
+    return 0
+
+
+def log_source_orientation(sources: list[Path]) -> None:
+    """Print the per-clip rotation table.
+
+    Each source is auto-rotated independently at render time, so mixed
+    rotations across the day's clips are handled correctly — this table makes
+    that auditable (and surfaces the footgun of pre-concatenating clips with
+    differing rotation, which would force a single rotation onto all of them).
+    """
+    print("-> talking-head source orientation:", flush=True)
+    rotations = set()
+    for index, source in enumerate(sources):
+        rotation = probe_rotation(source)
+        rotations.add(rotation % 360)
+        upright = "portrait" if abs(rotation) % 180 == 90 else "as-shot"
+        print(f"     [{index}] {source.name}: rotation={rotation:>4}  ({upright})", flush=True)
+    if len(rotations) > 1:
+        print(
+            "     note: clips have MIXED rotations — each is auto-rotated per source, "
+            "so do not pre-concatenate them (stream-copy concat would flip the odd ones).",
+            flush=True,
+        )
 
 
 def source_is_landscape(path: Path) -> bool:
@@ -268,6 +320,57 @@ def split_segment(segment: SpeechSegment, target: float, max_len: float, min_len
     return chunks
 
 
+def warn_on_large_retake_drops(
+    before: list[SpeechSegment],
+    after: list[SpeechSegment],
+    sources: list[Path],
+    *,
+    threshold_sec: float = 4.0,
+) -> None:
+    """Warn when retake removal drops a long contiguous span of kept speech.
+
+    `smart` retake mode occasionally mis-reads a genuine continuous thought as a
+    false start and removes several seconds of real narrative, leaving a jump
+    mid-sentence. This is read-only — it does not change the cut — but flags the
+    span so it can be reviewed (and re-rendered with --retake-mode off or an
+    explicit --edit-decisions-json if wrong).
+    """
+    def coverage(segments: list[SpeechSegment], source_index: int) -> list[tuple[float, float]]:
+        spans = sorted(
+            (seg.start, seg.end) for seg in segments if seg.source_index == source_index
+        )
+        merged: list[tuple[float, float]] = []
+        for start, end in spans:
+            if merged and start <= merged[-1][1] + 1e-3:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+        return merged
+
+    for source_index, source in enumerate(sources):
+        kept_after = coverage(after, source_index)
+        for start, end in coverage(before, source_index):
+            cursor = start
+            for a_start, a_end in kept_after:
+                if a_end <= cursor or a_start >= end:
+                    continue
+                if a_start - cursor >= threshold_sec:
+                    print(
+                        f"     ⚠ retake removal dropped {a_start - cursor:.1f}s of speech in "
+                        f"{source.name} [{cursor:.1f}-{a_start:.1f}] — review if a real sentence "
+                        f"was cut (re-run with --retake-mode off or --edit-decisions-json).",
+                        flush=True,
+                    )
+                cursor = max(cursor, a_end)
+            if end - cursor >= threshold_sec:
+                print(
+                    f"     ⚠ retake removal dropped {end - cursor:.1f}s of speech in "
+                    f"{source.name} [{cursor:.1f}-{end:.1f}] — review if a real sentence "
+                    f"was cut (re-run with --retake-mode off or --edit-decisions-json).",
+                    flush=True,
+                )
+
+
 def collect_broll(paths: list[Path], broll_dir: Path | None) -> list[Path]:
     brolls = [path for path in paths if path.suffix.lower() in VIDEO_EXTENSIONS]
     if broll_dir:
@@ -349,6 +452,7 @@ def load_decision_chunks(path: Path) -> list[EditChunk]:
                 plan=str(raw["plan"]),
                 transition=str(raw.get("transition", "xfade")),
                 broll=raw.get("broll"),
+                video_transform=raw.get("video_transform"),
             )
         )
     return chunks
@@ -387,6 +491,10 @@ def medium_filter(src: str, label: str, chunk: EditChunk, *, y: str, scale: floa
 
 def chunk_video_filter(chunk: EditChunk, broll_input_index: int | None, label: str) -> str:
     src = f"[{chunk.source_index}:v]trim=start={chunk.start:.3f}:end={chunk.end:.3f},setpts=PTS-STARTPTS,"
+    if chunk.video_transform == "rotate180":
+        src += "hflip,vflip,"
+    elif chunk.video_transform:
+        raise ValueError(f"Unsupported video_transform: {chunk.video_transform}")
     if chunk.plan == "close":
         return cover_crop_filter(src, label, chunk, scale=CLOSE_SCALE)
     if chunk.plan == "medium_close":
@@ -446,6 +554,7 @@ def render_chunk(sources: list[Path], chunk: EditChunk, clips_dir: Path) -> Path
         plan=chunk.plan,
         transition=chunk.transition,
         broll=chunk.broll,
+        video_transform=chunk.video_transform,
     )
     filters = [
         chunk_video_filter(local_chunk, broll_input_index, "[vout]"),
@@ -886,9 +995,12 @@ def build_talking_head_timeline_transcript(
     transcripts_by_source: dict[int, object],
     *,
     transition_duration: float,
+    corrections: dict[str, str] | None = None,
 ):
     from src.schemas import Transcript, Word
+    from src.subtitles import apply_word_corrections, build_corrections_map
 
+    corrections_map = build_corrections_map(corrections)
     timed_chunks = chunks_with_output_timing(chunks, transition_duration=transition_duration)
     words: list[Word] = []
     for chunk, timed_chunk in zip(chunks, timed_chunks):
@@ -907,7 +1019,7 @@ def build_talking_head_timeline_transcript(
             output_end = float(timed_chunk["out_start"]) + (clipped_end - chunk.start)
             words.append(
                 Word(
-                    word=word.word,
+                    word=apply_word_corrections(word.word, corrections_map),
                     start=round(output_start, 3),
                     end=round(output_end, 3),
                 )
@@ -1043,10 +1155,12 @@ def render_talking_head_subtitles(
         raise ValueError(f"subtitle style must be one of: {available}")
 
     style = cfg.subtitle_styles[style_id]
+    corrections = getattr(cfg, "subtitle_corrections", {}) or {}
     transcript = build_talking_head_timeline_transcript(
         chunks,
         transcripts_by_source,
         transition_duration=args.transition_duration_sec,
+        corrections=corrections,
     )
     transcript_path = out_dir / "talking_head_timeline_transcript.json"
     transcript_path.write_text(transcript.model_dump_json(indent=2), encoding="utf-8")
@@ -1325,7 +1439,31 @@ def parse_args() -> argparse.Namespace:
         help="Render into a specific version subfolder (e.g. v2), overwriting it. "
         "Default: create the next vN so previous renders are kept.",
     )
-    parser.add_argument("--input", action="append", required=True, type=Path, help="Raw talking-head source video.")
+    parser.add_argument(
+        "--input",
+        action="append",
+        default=[],
+        type=Path,
+        help="Raw talking-head source video. Repeat for several clips — each is a "
+        "separate source whose rotation is handled independently. Required unless "
+        "--clips-dir is given.",
+    )
+    parser.add_argument(
+        "--clips-dir",
+        type=Path,
+        help="Folder of a day's talking-head clips. Every video file inside is "
+        "ingested as its own --input (sorted by name), so per-clip rotation is "
+        "always handled correctly. Never pre-concatenate mixed-rotation clips.",
+    )
+    parser.add_argument(
+        "--keep-full-source",
+        action="append",
+        default=[],
+        type=int,
+        help="Source index (0-based, in input order) to keep IN FULL — no silence "
+        "trimming or retake removal. Use for silent demo/screen clips so the demo "
+        "plays end-to-end. Repeatable.",
+    )
     parser.add_argument("--broll", action="append", default=[], type=Path, help="Optional b-roll video file.")
     parser.add_argument("--broll-dir", type=Path, help="Optional directory with b-roll video files.")
     parser.add_argument("--silence-threshold-db", type=float, default=-40.0)
@@ -1373,18 +1511,68 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override the title fade-out duration (default: title_overlay.fade_out_sec).",
     )
+    parser.add_argument(
+        "--auto-title",
+        action="store_true",
+        help="Overlay the default challenge title (config.yaml title_overlay.default_title) "
+        "without naming it. For challenge-day videos so the title is added automatically. "
+        "Ignored if --title is given explicitly.",
+    )
     return parser.parse_args()
+
+
+def resolve_title_clip(args: argparse.Namespace, cfg: object) -> Path | None:
+    """Decide which title clip to overlay: explicit --title, else --auto-title default."""
+    if args.title is not None:
+        return args.title.resolve() if args.title.is_absolute() else (ROOT / args.title).resolve()
+    if getattr(args, "auto_title", False):
+        default_title = getattr(cfg.title_overlay, "default_title", None)
+        if not default_title:
+            print(
+                "     warning: --auto-title set but config.yaml title_overlay.default_title is empty — "
+                "no title overlaid.",
+                flush=True,
+            )
+            return None
+        path = Path(default_title)
+        resolved = path.resolve() if path.is_absolute() else (ROOT / path).resolve()
+        print(f"     auto-title: overlaying challenge title {display_path(resolved)}", flush=True)
+        return resolved
+    return None
+
+
+def resolve_input_paths(args: argparse.Namespace) -> list[Path]:
+    """Collect source clip paths from --input and/or --clips-dir."""
+    paths = [path.resolve() if path.is_absolute() else (ROOT / path).resolve() for path in args.input]
+    if args.clips_dir:
+        clips_dir = args.clips_dir.resolve() if args.clips_dir.is_absolute() else (ROOT / args.clips_dir).resolve()
+        if not clips_dir.is_dir():
+            raise NotADirectoryError(clips_dir)
+        paths.extend(
+            path
+            for path in sorted(clips_dir.iterdir())
+            if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
+        )
+    if not paths:
+        raise SystemExit("No input clips: pass --input <file> (repeatable) or --clips-dir <folder>.")
+    return paths
 
 
 def main() -> None:
     args = parse_args()
     sources = organize_talking_head_sources(
-        [path.resolve() if path.is_absolute() else (ROOT / path).resolve() for path in args.input],
+        resolve_input_paths(args),
         slug=args.slug,
     )
     for source in sources:
         if not source.exists():
             raise FileNotFoundError(source)
+    log_source_orientation(sources)
+
+    keep_full = {index for index in args.keep_full_source if 0 <= index < len(sources)}
+    for index in args.keep_full_source:
+        if index not in keep_full:
+            print(f"     warning: --keep-full-source {index} is out of range (have {len(sources)} sources)", flush=True)
 
     broll_dir = None
     if args.broll_dir:
@@ -1426,10 +1614,16 @@ def main() -> None:
             }
         ]
     else:
+        detected: list[SpeechSegment] = []
+        full_segments: list[SpeechSegment] = []
         for source_index, source in enumerate(sources):
             duration = ffprobe_duration(source)
+            if source_index in keep_full:
+                full_segments.append(SpeechSegment(source_index, 0.0, duration))
+                print(f"     keep-full: [{source_index}] {source.name} kept in full ({duration:.1f}s, no trim)", flush=True)
+                continue
             silences = detect_silences(source, args.silence_threshold_db, args.min_silence_sec)
-            speech.extend(
+            detected.extend(
                 speech_from_silences(
                     source_index=source_index,
                     duration=duration,
@@ -1439,15 +1633,21 @@ def main() -> None:
                 )
             )
 
-        if not speech:
+        if not detected and not full_segments:
             raise RuntimeError("No speech segments detected. Try lowering --silence-threshold-db or --min-silence-sec.")
 
-        speech, retake_reviews = plan_speech_with_retakes(
-            sources=sources,
-            speech=speech,
-            out_dir=out_dir,
-            args=args,
-        )
+        if detected:
+            planned, retake_reviews = plan_speech_with_retakes(
+                sources=sources,
+                speech=detected,
+                out_dir=out_dir,
+                args=args,
+            )
+            warn_on_large_retake_drops(detected, planned, sources)
+        else:
+            planned, retake_reviews = [], []
+
+        speech = sorted(planned + full_segments, key=lambda seg: (seg.source_index, seg.start))
         if not speech:
             raise RuntimeError("Retake planning removed every speech segment. Try --retake-mode off.")
 
@@ -1461,6 +1661,13 @@ def main() -> None:
             args.transition,
             args.split_long_speech,
         )
+        if keep_full:
+            # Demo/screen clips kept in full must not be cropped ("close") — force
+            # an un-cropped medium beat so the whole screen stays visible.
+            chunks = [
+                replace(chunk, plan="medium", broll=None) if chunk.source_index in keep_full else chunk
+                for chunk in chunks
+            ]
     write_retake_review(path=review_path, reviews=retake_reviews, args=args)
     quality_transcripts = load_or_transcribe_quality_transcripts(
         sources,
@@ -1488,8 +1695,8 @@ def main() -> None:
         final = out_dir / "final_subtitled.mp4"
 
     title_artifacts = None
-    if args.title:
-        title_clip = args.title.resolve() if args.title.is_absolute() else (ROOT / args.title).resolve()
+    title_clip = resolve_title_clip(args, _load_render_config())
+    if title_clip:
         if not title_clip.exists():
             raise FileNotFoundError(title_clip)
         titled = burn_title_overlay(

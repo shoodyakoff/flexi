@@ -1,3 +1,4 @@
+import json
 import unittest
 import sys
 from argparse import Namespace
@@ -887,6 +888,37 @@ class TalkingHeadRetakePlannerTests(unittest.TestCase):
 
         self.assertTrue(args.subtitles)
         self.assertEqual(args.subtitle_style, "editorial_pop")
+
+    def test_explicit_edit_plan_can_rotate_a_screen_chunk(self) -> None:
+        from pipelines.render_talking_head_dynamic_clean import chunk_video_filter, load_decision_chunks
+
+        with TemporaryDirectory() as tmp:
+            plan = Path(tmp) / "edit_plan.json"
+            plan.write_text(
+                json.dumps(
+                    {
+                        "chunks": [
+                            {
+                                "index": 0,
+                                "source_index": 0,
+                                "source": "screen.mov",
+                                "start": 1.0,
+                                "end": 4.0,
+                                "duration": 3.0,
+                                "plan": "medium",
+                                "transition": "micro_push",
+                                "video_transform": "rotate180",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            chunks = load_decision_chunks(plan)
+
+        self.assertEqual(chunks[0].video_transform, "rotate180")
+        self.assertIn("hflip,vflip", chunk_video_filter(chunks[0], None, "[vout]"))
 
     def test_quality_report_flags_short_wordless_boundary_chunk(self) -> None:
         from pipelines.render_talking_head_dynamic_clean import EditChunk, build_timeline_quality_report

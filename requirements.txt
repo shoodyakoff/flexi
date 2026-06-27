@@ -15,5 +15,12 @@ imagehash>=4.3
 numpy>=1.24
 opencv-python-headless>=4.8
 
+# ── Script library web UI (optional, local-only: `python -m src.script_app`) ─
+# Browses/edits the local SQLite script library (data/scripts.sqlite, gitignored).
+fastapi>=0.110
+uvicorn>=0.29
+jinja2>=3.1
+python-multipart>=0.0.9
+
 # ── Tests ───────────────────────────────────────────────────────────────
 pytest>=8.0

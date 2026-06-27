@@ -1,0 +1,34 @@
+<form class="filters" method="get" action="/">
+  <input type="hidden" name="item_type" value="{{ item_type }}">
+  <input name="q" value="{{ q }}" placeholder="Поиск">
+  <select name="status">
+    <option value="">Все статусы</option>
+    {% for option in status_options %}
+    <option value="{{ option }}" {{ 'selected' if status == option else '' }}>
+      {% if item_type == 'challenge_backlog' %}{{ backlog_status_labels.get(option, option) }}{% else %}{{ status_labels.get(option, option) }}{% endif %}
+    </option>
+    {% endfor %}
+  </select>
+  {% if item_type == 'generated_video' %}
+  <select name="funnel_stage">
+    <option value="">Все этапы</option>
+    {% for option in ['TOFU', 'MOFU', 'BOFU'] %}
+    <option value="{{ option }}" {{ 'selected' if funnel_stage == option else '' }}>{{ funnel_stage_labels.get(option, option) }}</option>
+    {% endfor %}
+  </select>
+  <select name="cta_type">
+    <option value="">Все призывы</option>
+    {% for option in ['save', 'link', 'keyword', 'pinned', 'other'] %}
+    <option value="{{ option }}" {{ 'selected' if cta_type == option else '' }}>{{ cta_type_labels.get(option, option) }}</option>
+    {% endfor %}
+  </select>
+  {% elif item_type == 'challenge_backlog' %}
+  <select name="category">
+    <option value="">Все категории</option>
+    {% for option in categories %}
+    <option value="{{ option }}" {{ 'selected' if category == option else '' }}>{{ option }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+  <button>Фильтровать</button>
+</form>

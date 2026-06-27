@@ -70,8 +70,16 @@ ambiguous or a required asset is missing, ask before rendering.
 
 For the 3-strip and talking-head routes, remember that **iPhone rotation tags
 lie** — verify clip orientation by eye (on a frame with a horizon), not by
-metadata. After a render, run the matching QA check and report the output path
-plus any QA FAILs.
+metadata. For route #2 (Говорящая голова) specifically: a day's clips often have
+**mixed rotation**, so feed them as **separate `--input` files or via
+`--clips-dir`** and **never stream-copy concat** them into one source (that
+flips the odd-rotation demo clips upside-down). Use `--keep-full-source <idx>`
+for silent demo clips, heed the `⚠ retake removal dropped …` warning, and rely
+on `config.yaml → subtitle_corrections` for recurring Whisper term fixes. **For a
+recurring titled series**, pass `--auto-title` so the series title is overlaid
+without a reminder, and publish `final_titled.mp4`. See CLAUDE.md "clip ingestion
+rules" for the full set. After a render, run the
+matching QA check and report the output path plus any QA FAILs.
 
 After tests pass, a render succeeds, or a coherent documentation cleanup is
 complete, remind the user to make a small, focused commit before starting
