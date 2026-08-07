@@ -1,13 +1,14 @@
 from pathlib import Path
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 from src.shnurok.cutout import cutout_graphic
 
 def _make_src(p: Path):
-    a = np.full((200, 300, 3), 255, np.uint8)      # white bg
-    a[60:140, 90:210] = (120, 120, 120)            # grey object
-    a[95:105, 145:155] = (255, 255, 255)           # white detail INSIDE object
-    Image.fromarray(a).save(p)
+    img = Image.new("RGB", (300, 200), (255, 255, 255))      # white bg
+    d = ImageDraw.Draw(img)
+    d.ellipse([90, 60, 209, 139], fill=(120, 120, 120))      # grey object; bbox corners stay white
+    d.rectangle([145, 95, 154, 104], fill=(255, 255, 255))   # white detail INSIDE the object
+    img.save(p)
 
 def test_cutout_removes_bg_keeps_inner_white(tmp_path):
     src = tmp_path / "in.png"; out = tmp_path / "out.png"; _make_src(src)
