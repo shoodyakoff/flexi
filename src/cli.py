@@ -625,6 +625,19 @@ def validate(script: Path = typer.Argument(..., help="Path to script JSON")):
     console.print(f"[bold green]✓ Script valid:[/bold green] {script}")
 
 
+@app.command()
+def shnurok(
+    folder: Path = typer.Argument(..., help="Folder with dropped sources for one reel"),
+    style: str = typer.Option("both", help="classic | bold | both"),
+):
+    """Assemble a SHNUROK/NUMERIS-style sneaker reel from dropped sources."""
+    from .shnurok.build import build_shnurok
+    styles = ("classic", "bold") if style == "both" else (style,)
+    outs = build_shnurok(folder, styles=styles)
+    for st, path in outs.items():
+        console.print(f"[green]{st}[/green] -> {path}")
+
+
 def _ffprobe_duration(path: Path) -> float:
     """Get video/audio duration in seconds via ffprobe."""
     result = subprocess.run(
