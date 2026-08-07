@@ -27,6 +27,9 @@ def test_compose_hook_geometry(tmp_path):
     r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                         "stream=width,height", "-of", "csv=p=0", str(out)], capture_output=True, text=True)
     assert "1080,1920" in r.stdout
+    dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout)
+    assert dur == pytest.approx(2.0, abs=0.3)
 
 
 def test_compose_hook_no_behind(tmp_path):
@@ -51,3 +54,6 @@ def test_compose_hook_no_behind(tmp_path):
     r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                         "stream=width,height", "-of", "csv=p=0", str(out)], capture_output=True, text=True)
     assert "1080,1920" in r.stdout
+    dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout)
+    assert dur == pytest.approx(2.0, abs=0.3)
