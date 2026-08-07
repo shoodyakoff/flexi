@@ -509,3 +509,32 @@ subtitle_styles:
     accent_phrases:
       - до сих пор
       - за платными
+
+shnurok:
+  accent_bgr: "&H2F34D5&"     # #D5342F (SHNUROK red), ASS BGR
+  hook_step: 108              # line spacing for staircase/stacked titles
+  fly_dur: 0.24              # graphic fly-in duration (s)
+  behind_fontsize: 140       # size of the keyword drawn behind the subject
+  graphic: { width: 330, center_x: 628, center_y: 1380 }
+  loudness: { sub_lufs: -16.0, music_lufs: -26.0, limiter: 0.95 }
+  styles:
+    classic:
+      title_font: "Gilroy Heavy"
+      word_font: "Gilroy Bold"
+      hook_size: 126
+      cta_size: 104
+      word_size: 54
+      use_accent: false
+      uppercase_words: false
+      tilt: false
+      transitions: crossfade
+    bold:
+      title_font: "Gilroy Heavy"
+      word_font: "Gilroy Heavy"
+      hook_size: 140
+      cta_size: 112
+      word_size: 58
+      use_accent: true
+      uppercase_words: true
+      tilt: true
+      transitions: flash_punch
