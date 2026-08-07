@@ -28,10 +28,13 @@ def word_subs_ass(words, style, out_path, pos=(540, 940), window=None):
     x, y = pos
     ev = []
     for i, (s, e, cl) in enumerate(items):
-        nxt = items[i + 1][0] if i + 1 < len(items) else (e + 0.40)
-        end = min(e + 0.40, nxt - 0.02)
-        if end <= s + 0.05:
-            end = min(s + 0.12, nxt - 0.01)
+        last = i + 1 >= len(items)
+        if last:
+            end = e + 0.40
+        else:
+            end = min(e + 0.40, items[i + 1][0] - 0.02)
+        if end <= s + 0.05:  # degenerate/near-duplicate timings
+            end = (s + 0.12) if last else min(s + 0.12, items[i + 1][0] - 0.01)
         disp = cl.upper() if style.uppercase_words else cl
         tags = f"\\pos({x},{y}){SOFTW}{POPW}"
         if style.use_accent and is_accent(cl):

@@ -1,4 +1,4 @@
-import re
+import pytest
 from src.shnurok.style import load_style
 from src.shnurok.word_subs import word_subs_ass
 
@@ -29,3 +29,17 @@ def test_uppercase_and_window(tmp_path):
     assert "ТЕСТ" not in body                        # outside window dropped
     assert "НАДОЕЛО" in body                          # uppercased
     assert "&H2F34D5&" in body                        # accent word in bold
+
+def test_last_word_full_tail(tmp_path):
+    s = load_style("classic")
+    out = tmp_path / "w.ass"
+    word_subs_ass([(5.0, 5.4, "а"), (6.0, 6.4, "б")], s, out)
+    evs = _events(out.read_text(encoding="utf-8"))
+    assert _end(evs[-1]) == pytest.approx(6.80, abs=1e-6)   # last word_end 6.4 + 0.40
+
+def test_single_word_full_tail(tmp_path):
+    s = load_style("classic")
+    out = tmp_path / "w.ass"
+    word_subs_ass([(5.0, 5.4, "а")], s, out)
+    evs = _events(out.read_text(encoding="utf-8"))
+    assert _end(evs[-1]) == pytest.approx(5.80, abs=1e-6)
