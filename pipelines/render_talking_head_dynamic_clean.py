@@ -679,6 +679,16 @@ def concat_chunks(chunk_paths: list[Path], chunks: list[EditChunk], out_dir: Pat
             str(concat_file),
             "-c",
             "copy",
+            # Stream-copy concat leaves the video track starting at the encoder's
+            # B-frame delay (~0.02s) while audio starts at 0, so players show a
+            # BLACK frame before the first picture — and every thumbnail grabber
+            # that samples t=0 gets that black square. Shift PTS and DTS by the
+            # SAME amount so the track starts at 0 without re-encoding. Never use
+            # the combined `ts=` form here: it assigns one value to both, which
+            # flattens DTS onto PTS, destroys B-frame decode order and makes
+            # playback stutter.
+            "-bsf:v",
+            "setts=pts=PTS-STARTPTS:dts=DTS-STARTPTS",
             "-movflags",
             "+faststart",
             str(out),
@@ -1490,6 +1500,14 @@ def parse_args() -> argparse.Namespace:
         help="Allow plan changes inside long speech segments. Off by default: changes happen only at detected pauses.",
     )
     parser.add_argument(
+        "--close-scale",
+        type=float,
+        default=CLOSE_SCALE,
+        help=f"How much the 'close' beats zoom in versus the 'medium' ones "
+        f"(default {CLOSE_SCALE}). Raise it (e.g. 1.45) when the alternation "
+        "between wide and tight framing should read clearly on its own.",
+    )
+    parser.add_argument(
         "--subtitles",
         action="store_true",
         help="Burn standard-mode subtitles onto an additional final_subtitled.mp4 output.",
@@ -1559,7 +1577,10 @@ def resolve_input_paths(args: argparse.Namespace) -> list[Path]:
 
 
 def main() -> None:
+    global CLOSE_SCALE
+
     args = parse_args()
+    CLOSE_SCALE = args.close_scale
     sources = organize_talking_head_sources(
         resolve_input_paths(args),
         slug=args.slug,

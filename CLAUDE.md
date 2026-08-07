@@ -198,6 +198,19 @@ local input, never source of truth.
   clip orientation by eye on a frame with a horizon, not by metadata.
 - After a render, run the matching QA check and report the output path + any QA
   FAILs.
+- **MANDATORY audio-dedup gate (do this as its own step before ever saying a
+  talking-head/ref-style render is "готово"/done).** `qa_talking_head.py` only
+  catches *identical* duplicate takes (`ДУБЛИ`); it does **not** catch the speaker
+  **restating the same thought in different words** or **stuttering a word twice**
+  (e.g. d63: «и токены у меня юзаются меньше…» immediately restated as «и токенов
+  я заюзал меньше», and «поэтому, поэтому если…»). So: **transcribe the FINAL
+  rendered audio** (`ffmpeg -i final_subtitled.mp4 -vn -ac 1 -ar 16000 …wav` →
+  faster-whisper), **read the transcript end-to-end, and flag any back-to-back
+  restatement or doubled word.** If found, cut it via an explicit
+  `--edit-decisions-json` (drop the weaker/earlier take; keep tails padded — see
+  the crossfade note) and re-render. Only report done once the final transcript
+  reads clean with no repeated thought. Never skip this because QA said
+  `ДУБЛИ: не найдено`.
 
 ## When to ask the user
 

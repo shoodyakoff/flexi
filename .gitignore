@@ -63,3 +63,26 @@ assets/hook_overlays/*
 !assets/**/.gitkeep
 !assets/hook_overlays/_meta.json
 !assets/**/_meta.json
+
+# Августовский контент-план Сопровод (личные материалы, не в публичный репо)
+assets/сопровод08/
+видео-финал/
+ДЕДУП_ИТОГИ_И_ДОРАБОТКИ.md
+
+# Локальный мусор и медиа (не в публичный репо)
+.snap_tmp.*
+.req_tmp.*
+assets/shnurok_test/
+
+# Личные контент-батчи под мои серии (для себя, не для общего доступа)
+pipelines/publish/
+pipelines/fun_final.py
+pipelines/prep_parts.py
+pipelines/schedule_month.py
+pipelines/sovety_batch.py
+pipelines/sovety_reel.py
+pipelines/qa_sovety.py
+pipelines/qa_dedup.py
+pipelines/qa_seams.py
+pipelines/hook_demo_batch.py
+pipelines/hook_demo_cta.py

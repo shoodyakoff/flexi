@@ -369,6 +369,13 @@ def build_concat_command(concat_list: Path, output_path: Path) -> list[str]:
         str(concat_list),
         "-c",
         "copy",
+        # Rebase video timestamps to 0 — otherwise stream-copy concat starts the
+        # video track ~0.02s late (B-frame delay) and the first frame renders as
+        # a black square in players and thumbnails. PTS and DTS must shift by the
+        # same amount; the combined `ts=` form flattens DTS onto PTS and breaks
+        # B-frame decode order (visible stutter).
+        "-bsf:v",
+        "setts=pts=PTS-STARTPTS:dts=DTS-STARTPTS",
         "-movflags",
         "+faststart",
         str(output_path),
