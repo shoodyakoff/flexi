@@ -20,6 +20,7 @@ import subprocess
 from pathlib import Path
 
 import yaml
+from rich.console import Console
 
 from src.output_paths import update_latest, versioned_dir
 from src.shnurok.structure import inventory, order_broll, split_hook_cta
@@ -33,14 +34,16 @@ from src.shnurok.audio_mix import mix_voice_music
 from src.shnurok.render_body import render_body
 from src.shnurok.render_cta import render_cta
 
+console = Console()
+
 FONTS_DIR = "assets/fonts"
 DEFAULT_MUSIC = Path("assets/music/provocative.mp3")
 
-# Filenames that look like native camera output (IMG_1234.MOV, DJI_0001.MP4,
-# GOPR0001.MP4, ...). Used to prefer real footage over a downloaded
-# reference/inspiration clip that happens to carry an audio stream too (see
-# `_pick_talking_head` / `_broll_fallback` below).
-_CAMERA_NAME_RE = re.compile(r"^(img|mov|dji|gopr?o?)[_-]?\d", re.IGNORECASE)
+# Filenames that look like native camera output (IMG_1234.MOV, MVI_0001.MOV,
+# DJI_0001.MP4, GOPR0001.MP4, ...). Used to prefer real footage over a
+# downloaded reference/inspiration clip that happens to carry an audio
+# stream too (see `_pick_talking_head` / `_broll_fallback` below).
+_CAMERA_NAME_RE = re.compile(r"^(img|mvi|dji|gopr?o?)[_-]?\d", re.IGNORECASE)
 
 
 def _camera_native(paths: list[Path]) -> list[Path]:
@@ -49,7 +52,11 @@ def _camera_native(paths: list[Path]) -> list[Path]:
 
 
 def _pick_talking_head(inv: dict) -> Path:
-    """Pick the real talking-head clip out of `inv["talking_head"]`.
+    """Best-effort pick of the real talking-head clip out of
+    `inv["talking_head"]`. This is a FALLBACK for unattended/quick use only
+    — the operating agent should pass `talking_head=...` explicitly whenever
+    it knows the folder's structure (it always does, since it just sorted
+    `raw/` into it).
 
     `inventory()` classifies ANY video with an audio stream as
     "talking_head" (see structure.py) — a folder can contain several such
@@ -57,14 +64,27 @@ def _pick_talking_head(inv: dict) -> Path:
     downloaded reference reel used only as visual inspiration, never as
     source footage). We can't afford to transcribe every candidate just to
     find the one real take, so we prefer camera-native filenames
-    (IMG_####/DJI_####/...) over anything else (a downloaded reel's
-    filename never matches that convention), then take the
-    alphabetically-first match — stable and cheap.
+    (IMG_####/MVI_####/DJI_####/...) over anything else (a downloaded
+    reel's filename never matches that convention), then take the
+    alphabetically-first match. When that still leaves 2+ candidates, this
+    is a genuine guess (in this fixture it only resolves correctly because
+    IMG_3968 sorts before IMG_9575 — an accident of naming, not a
+    guarantee) — warn loudly instead of pretending it's reliable.
     """
     candidates = inv.get("talking_head") or []
     if not candidates:
-        raise ValueError("build_shnurok: no talking-head clip found in inventory")
-    return _camera_native(candidates)[0]
+        raise ValueError(
+            "build_shnurok: no talking-head clip found in inventory (pass talking_head=... explicitly)"
+        )
+    picked = _camera_native(candidates)
+    chosen = picked[0]
+    if len(picked) > 1:
+        console.log(
+            f"[yellow]⚠[/yellow] build_shnurok: {len(picked)} talking-head candidates "
+            f"({', '.join(p.name for p in picked)}) — guessed '{chosen.name}' (camera-native "
+            "filename, alphabetically first). If wrong, pass talking_head=<path> explicitly."
+        )
+    return chosen
 
 
 def _broll_fallback(inv: dict, th: Path) -> list[Path]:
@@ -81,6 +101,12 @@ def _broll_fallback(inv: dict, th: Path) -> list[Path]:
     if inv.get("broll"):
         return inv["broll"]
     return [p for p in _camera_native(inv.get("talking_head") or []) if p != th]
+
+
+def _resolve(folder: Path, p: Path | str) -> Path:
+    """Resolve an explicit source path against `folder` (unless already absolute)."""
+    p = Path(p)
+    return p if p.is_absolute() else folder / p
 
 
 def _load_output_root(config_path: Path | str) -> Path:
@@ -132,19 +158,53 @@ def _render_hook(style_id, style, th, hook_s, hook_dur, hook_front_ass, graphic,
     return hook_clip
 
 
-def build_shnurok(folder: Path, styles=("classic", "bold"), config_path: str = "config.yaml") -> dict[str, Path]:
-    folder = Path(folder)
-    inv = inventory(folder)
+def build_shnurok(
+    folder: Path,
+    styles=("classic", "bold"),
+    config_path: str = "config.yaml",
+    talking_head: Path | str | None = None,
+    voice: Path | str | None = None,
+    broll: list[Path | str] | None = None,
+    graphic: Path | str | None = None,
+    music: Path | str | None = None,
+) -> dict[str, Path]:
+    """Build a full shnurok reel per style, written under the versioned
+    output layout.
 
-    th = _pick_talking_head(inv)
-    if not inv.get("voice"):
-        raise ValueError("build_shnurok: no voiceover (voice) file found in inventory")
-    voice = inv["voice"][0]
-    music = inv["music"][0] if inv.get("music") else DEFAULT_MUSIC
-    broll = order_broll(_broll_fallback(inv, th))
+    Source selection: `talking_head`/`voice`/`broll`/`graphic`/`music` are
+    resolved relative to `folder` (unless already absolute); `broll` is a
+    list of paths. Pass these explicitly whenever the caller already knows
+    the folder's structure — the operating agent does, since it just
+    classified `raw/` into this folder per CLAUDE.md's inbox workflow, and
+    it decides which take/clips belong in the reel. When a source is left
+    `None`, `inventory()` is used as a best-effort auto-pick fallback (for
+    quick/unattended use); see `_pick_talking_head`/`_broll_fallback` for
+    its heuristics and the warning it logs when a talking-head pick is
+    ambiguous — that warning means "verify this, or pass talking_head=...".
+    """
+    folder = Path(folder)
+    need_inventory = any(v is None for v in (talking_head, voice, broll, graphic, music))
+    inv = inventory(folder) if need_inventory else {}
+
+    th = _resolve(folder, talking_head) if talking_head is not None else _pick_talking_head(inv)
+
+    if voice is not None:
+        voice = _resolve(folder, voice)
+    elif inv.get("voice"):
+        voice = inv["voice"][0]
+    else:
+        raise ValueError("build_shnurok: no voiceover (voice) file found in inventory (pass voice=... explicitly)")
+
+    music = _resolve(folder, music) if music is not None else (inv["music"][0] if inv.get("music") else DEFAULT_MUSIC)
+
+    if broll is not None:
+        broll = order_broll([_resolve(folder, p) for p in broll])
+    else:
+        broll = order_broll(_broll_fallback(inv, th))
     if not broll:
-        raise ValueError("build_shnurok: no b-roll clips found in inventory")
-    graphic = inv["graphic"][0] if inv.get("graphic") else None
+        raise ValueError("build_shnurok: no b-roll clips found in inventory (pass broll=[...] explicitly)")
+
+    graphic = _resolve(folder, graphic) if graphic is not None else (inv["graphic"][0] if inv.get("graphic") else None)
 
     slug = folder.name
     output_root = _load_output_root(config_path)
@@ -218,7 +278,7 @@ def build_shnurok(folder: Path, styles=("classic", "bold"), config_path: str = "
              "-map", "0:v", "-map", "1:a",
              "-c:v", "libx264", "-crf", "18", "-preset", "medium",
              "-color_range", "tv", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709",
-             "-c:a", "copy", "-shortest", "-movflags", "+faststart", str(final_path)],
+             "-c:a", "copy", "-t", f"{total_dur:.3f}", "-shortest", "-movflags", "+faststart", str(final_path)],
             check=True,
         )
         results[style_id] = final_path
