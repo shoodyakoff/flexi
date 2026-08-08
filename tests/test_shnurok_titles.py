@@ -1,6 +1,6 @@
 from pathlib import Path
 from src.shnurok.style import load_style
-from src.shnurok.titles import hook_titles_ass, cta_titles_ass, ass_ts
+from src.shnurok.titles import hook_titles_ass, screens_titles_ass, ass_ts
 
 def test_ass_ts():
     assert ass_ts(0) == "0:00:00.00"
@@ -22,15 +22,18 @@ def test_hook_writes_front_and_behind(tmp_path):
     assert "&H2F34D5&" in behind                                # bold accents keyword
     assert "Gilroy Heavy" in front
 
-def test_cta_lines_share_screen_end(tmp_path):
+def test_screens_titles_share_screen_end_and_staircase(tmp_path):
+    # hook and CTA both render through screens_titles_ass: left-anchored (an7)
+    # staircase, lines of one screen share their end time.
     s = load_style("classic")
     out = tmp_path / "cta.ass"
-    cta_titles_ass(
-        screens=[[(44.9, 47.3, "БЕЗ НАДОЕДЛИВЫХ", 200),
-                  (46.1, 47.3, "ЛЕЙБЛОВ", 308),
-                  (46.7, 47.3, "БЕЗ ПОПЫТОК", 416)]],
-        style=s, out_path=out,
+    screens_titles_ass(
+        screens=[[(44.9, 47.3, "БЕЗ НАДОЕДЛИВЫХ", 120, 300),
+                  (46.1, 47.3, "ЛЕЙБЛОВ", 190, 408),
+                  (46.7, 47.3, "БЕЗ ПОПЫТОК", 260, 516)]],
+        style=s, size=s.cta_size, out_path=out,
     )
     body = out.read_text(encoding="utf-8")
     assert body.count("0:00:47.30") == 3          # all three clear together
-    assert "\\an9" in body and "&H2F34D5&" not in body   # right-aligned, no accent in classic
+    assert "\\an7" in body and "\\an9" not in body   # left staircase, same as hook
+    assert "&H2F34D5&" not in body                    # no accent colour in classic

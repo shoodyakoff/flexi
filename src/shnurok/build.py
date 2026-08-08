@@ -25,8 +25,8 @@ from rich.console import Console
 from src.output_paths import update_latest, versioned_dir
 from src.shnurok.structure import inventory, order_broll, split_hook_cta
 from src.shnurok.style import load_style
-from src.shnurok.titleplan import cta_screens_from_words, hook_lines_from_words
-from src.shnurok.titles import cta_titles_ass, hook_titles_ass
+from src.shnurok.titleplan import plan_screens
+from src.shnurok.titles import screens_titles_ass
 from src.shnurok.word_subs import word_subs_ass
 from src.shnurok.cutout import cutout_graphic
 from src.shnurok.hook_compose import compose_hook
@@ -260,11 +260,11 @@ def build_shnurok(
     for style_id in styles:
         style = load_style(style_id, config_path)
 
-        # a. hook titles
+        # a. hook titles (semantic screens: «…машины?» clears before «тогда смотри!»)
         hook_words_rel = [(s - hook_s, e - hook_s, w) for (s, e, w) in th_words if hook_s <= s < hook_e]
-        front = hook_lines_from_words(hook_words_rel, font_size=style.hook_size)
+        hook_screens = plan_screens(hook_words_rel, font_size=style.hook_size)
         hook_front_ass = out_dir / f"hook_front_{style_id}.ass"
-        hook_titles_ass(front, None, style, hook_front_ass)
+        screens_titles_ass(hook_screens, style, style.hook_size, hook_front_ass)
 
         # b. graphic + hook clip
         hook_clip = _render_hook(style_id, style, th, hook_s, hook_dur, hook_front_ass,
@@ -290,9 +290,9 @@ def build_shnurok(
         cta_words_final = [
             (s - cta_s + cta_off, e - cta_s + cta_off, w) for (s, e, w) in th_words if cta_s <= s < cta_e
         ]
-        screens = cta_screens_from_words(cta_words_final, font_size=style.cta_size)
+        screens = plan_screens(cta_words_final, font_size=style.cta_size)
         cta_ass = out_dir / f"cta_titles_{style_id}.ass"
-        cta_titles_ass(screens, style, cta_ass)
+        screens_titles_ass(screens, style, style.cta_size, cta_ass)
 
         # h. audio
         audio_out = out_dir / f"audio_{style_id}.m4a"

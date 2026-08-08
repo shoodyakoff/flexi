@@ -44,9 +44,12 @@ def hook_titles_ass(front_lines, behind, style, out_path):
         out_path.with_suffix(".behind.ass").write_text(
             _header(style.title_font, style.hook_size) + b + "\n", encoding="utf-8")
 
-def cta_titles_ass(screens, style, out_path):
+def screens_titles_ass(screens, style, size, out_path):
+    """Render staircase title screens (used for BOTH hook and CTA so they share
+    the same left-anchored an7 look). `screens` is a list of screens; each screen
+    a list of (start, end, TEXT, x, y). Lines of a screen share their end time."""
     ev = []
     for screen in screens:
-        for i, (t0, t1, txt, y) in enumerate(screen):
-            ev.append(_line(t0, t1, txt, 980, y, style, an=9, tilt=(-1.2 if i % 2 else 1.2)))
-    Path(out_path).write_text(_header(style.title_font, style.cta_size) + "\n".join(ev) + "\n", encoding="utf-8")
+        for i, (t0, t1, txt, x, y) in enumerate(screen):
+            ev.append(_line(t0, t1, txt, x, y, style, an=7, tilt=(-1.5 if i % 2 else 1.5)))
+    Path(out_path).write_text(_header(style.title_font, size) + "\n".join(ev) + "\n", encoding="utf-8")
