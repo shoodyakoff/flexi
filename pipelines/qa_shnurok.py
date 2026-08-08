@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""QA gates for shnurok: word-sub overlap, format, audio dedup.
+"""QA gates for shnurok: word-sub overlap, format (incl. HDR), audio dedup.
 
-Checks:
+Runs ALL gates against EVERY `final_*.mp4` in the render (classic AND bold,
+not just whichever sorts first) — a style-specific regression (e.g. one
+style's body subs overlapping) must not slip through because the other
+style happened to pass.
+
+Checks (per style):
   • WORD_SUBS — word-by-word subtitle timing: end[i] <= start[i+1] (no overlap)
-  • FORMAT    — video is 1080×1920 (vertical), 30fps, H.264, stereo audio
+  • FORMAT    — resolution == 1080x1920, duration >= 1s, and color transfer is
+                NOT HDR (arib-std-b67/smpte2084) — an HDR-tagged final means
+                the source's HDR->SDR tonemap (src/shnurok/media.py) was
+                skipped, producing washed/flat output
   • DEDUP     — transcribed final audio has no back-to-back duplicate words
 
 Invocation:
@@ -20,6 +28,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.output_paths import latest_version_dir  # noqa: E402
+
+HDR_TRANSFERS = {"arib-std-b67", "smpte2084"}
 
 
 def parse_ts(ts: str) -> float:
@@ -104,7 +114,12 @@ def check_single_word_subs(ass_path: Path | str) -> list[str]:
 
 
 def qa_video(path: Path | str) -> dict:
-    """Check video format: dimensions, duration, codec.
+    """Check video format: resolution, duration, and HDR-not-tonemapped.
+
+    Concretely checks: resolution == 1080x1920, duration >= 1s, and color
+    transfer is not an HDR transfer (arib-std-b67/smpte2084) — a correctly
+    built shnurok final is always tagged bt709 (see src/shnurok/media.py);
+    an HDR-tagged final means the tonemap step was skipped somewhere.
 
     Returns dict with keys:
       - ok: bool (no violations)
@@ -112,18 +127,19 @@ def qa_video(path: Path | str) -> dict:
       - duration: float (seconds)
       - is_vertical: bool (height > width)
       - codec: str (e.g. "h264")
+      - color_transfer: str (e.g. "bt709", "" if unknown)
       - violations: list[str] (empty = pass)
     """
     path = Path(path)
     r = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=width,height,codec_name:format=duration",
+         "-show_entries", "stream=width,height,codec_name,color_transfer:format=duration",
          "-of", "json", str(path)],
         capture_output=True, text=True
     )
     if r.returncode != 0:
         return {"ok": False, "width": 0, "height": 0, "duration": 0.0,
-                "is_vertical": False, "codec": "",
+                "is_vertical": False, "codec": "", "color_transfer": "",
                 "violations": [f"ffprobe error: {r.stderr.strip()}"]}
     data = json.loads(r.stdout or "{}")
     st = (data.get("streams") or [{}])[0]
@@ -131,13 +147,17 @@ def qa_video(path: Path | str) -> dict:
     w = int(st.get("width") or 0)
     h = int(st.get("height") or 0)
     dur = float(fmt.get("duration") or 0.0)
+    trc = st.get("color_transfer") or ""
     vio = []
     if (w, h) != (1080, 1920):
         vio.append(f"resolution {w}x{h} != 1080x1920")
     if dur < 1.0:
         vio.append(f"duration {dur:.2f}s too short")
+    if trc in HDR_TRANSFERS:
+        vio.append(f"HDR transfer {trc} not tonemapped to bt709")
     return {"ok": not vio, "width": w, "height": h, "duration": dur,
-            "is_vertical": h > w, "codec": st.get("codec_name"), "violations": vio}
+            "is_vertical": h > w, "codec": st.get("codec_name"), "color_transfer": trc,
+            "violations": vio}
 
 
 def qa_audio_dedup(path: Path | str) -> list[str]:
@@ -183,61 +203,72 @@ def main() -> int:
 
     d = slug_dir(args.slug, args.version)
 
-    # Find final videos
-    finals = list(d.glob("final_*.mp4"))
+    # Every final_*.mp4 (one per style, e.g. final_classic.mp4/final_bold.mp4)
+    # gets ALL gates run against it — a regression in one style must not
+    # slip through because a different style happened to be checked.
+    finals = sorted(d.glob("final_*.mp4"))
     if not finals:
         print(f"FAIL: no final_*.mp4 found in {d}")
         return 1
 
-    final_video = finals[0]  # Take the first (usually final_subtitled.mp4 or final_titled.mp4)
-    # Derive style from filename (final_classic.mp4 -> classic)
-    style = final_video.stem.replace("final_", "")
-    ass_file = d / f"body_subs_{style}.ass"
+    print(f"\nQA gates — {args.slug} ({len(finals)} style(s))")
 
-    print(f"\nQA gates — {args.slug}")
-    print(f"Video: {final_video.name}")
+    any_fail = False
+    for final_video in finals:
+        # Derive style from filename (final_classic.mp4 -> classic)
+        style = final_video.stem.replace("final_", "")
+        ass_file = d / f"body_subs_{style}.ass"
 
-    # Check word subs
-    word_sub_vio = []
-    if ass_file.exists():
-        word_sub_vio = check_single_word_subs(ass_file)
-        if word_sub_vio:
-            print(f"WORD_SUBS: FAIL")
-            for v in word_sub_vio:
-                print(f"  - {v}")
+        print(f"\n[{style}] {final_video.name}")
+
+        # Check word subs
+        word_sub_vio = []
+        if ass_file.exists():
+            word_sub_vio = check_single_word_subs(ass_file)
+            if word_sub_vio:
+                print(f"  WORD_SUBS: FAIL")
+                for v in word_sub_vio:
+                    print(f"    - {v}")
+            else:
+                print(f"  WORD_SUBS: PASS ✓")
         else:
-            print(f"WORD_SUBS: PASS ✓")
-    else:
-        print(f"WORD_SUBS: skipped (no {ass_file.name})")
+            print(f"  WORD_SUBS: skipped (no {ass_file.name})")
 
-    # Check format
-    fmt = qa_video(final_video)
-    if fmt["violations"]:
-        print(f"FORMAT: FAIL")
-        for v in fmt["violations"]:
-            print(f"  - {v}")
-    else:
-        print(f"FORMAT: PASS ✓ ({fmt['width']}×{fmt['height']} {fmt['duration']:.1f}s)")
+        # Check format (resolution, duration, HDR)
+        fmt = qa_video(final_video)
+        if fmt["violations"]:
+            print(f"  FORMAT: FAIL")
+            for v in fmt["violations"]:
+                print(f"    - {v}")
+        else:
+            print(f"  FORMAT: PASS ✓ ({fmt['width']}×{fmt['height']} {fmt['duration']:.1f}s, "
+                  f"transfer={fmt['color_transfer'] or 'untagged'})")
 
-    # Check audio dedup
-    dedup_vio = qa_audio_dedup(final_video)
-    if dedup_vio:
-        print(f"DEDUP: FAIL")
-        for v in dedup_vio[:3]:  # Show first 3
-            print(f"  - {v}")
-        if len(dedup_vio) > 3:
-            print(f"  ... and {len(dedup_vio) - 3} more")
-    else:
-        print(f"DEDUP: PASS ✓")
+        # Check audio dedup
+        dedup_vio = qa_audio_dedup(final_video)
+        if dedup_vio:
+            print(f"  DEDUP: FAIL")
+            for v in dedup_vio[:3]:  # Show first 3
+                print(f"    - {v}")
+            if len(dedup_vio) > 3:
+                print(f"    ... and {len(dedup_vio) - 3} more")
+        else:
+            print(f"  DEDUP: PASS ✓")
+
+        total_vio = len(word_sub_vio) + len(fmt["violations"]) + len(dedup_vio)
+        if total_vio:
+            print(f"  [{style}] ИТОГ: FAIL ({total_vio} violations)")
+            any_fail = True
+        else:
+            print(f"  [{style}] ИТОГ: PASS ✓")
 
     print("-" * 60)
 
-    total_vio = len(word_sub_vio) + len(fmt["violations"]) + len(dedup_vio)
-    if total_vio:
-        print(f"ИТОГ: FAIL ({total_vio} violations)\n")
+    if any_fail:
+        print(f"ИТОГ: FAIL (one or more styles failed)\n")
         return 1
     else:
-        print(f"ИТОГ: PASS ✓\n")
+        print(f"ИТОГ: PASS ✓ ({len(finals)} style(s))\n")
         return 0
 
 

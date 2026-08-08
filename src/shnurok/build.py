@@ -31,6 +31,7 @@ from src.shnurok.word_subs import word_subs_ass
 from src.shnurok.cutout import cutout_graphic
 from src.shnurok.hook_compose import compose_hook
 from src.shnurok.audio_mix import mix_voice_music
+from src.shnurok.media import source_tonemap_prefix
 from src.shnurok.render_body import render_body
 from src.shnurok.render_cta import render_cta
 
@@ -146,9 +147,10 @@ def _render_hook(style_id, style, th, hook_s, hook_dur, hook_front_ass, graphic,
         compose_hook(th, hook_s, hook_dur, hook_front_ass, None, None, car_png, shadow_png,
                      (fly_s, fly_e), style, FONTS_DIR, hook_clip)
     else:
+        pre = source_tonemap_prefix(th)
         subprocess.run(
             ["ffmpeg", "-y", "-v", "error", "-ss", f"{hook_s:.3f}", "-t", f"{hook_dur:.3f}", "-i", str(th),
-             "-vf", f"scale=1080:1920:flags=lanczos,setsar=1,fps=30,format=yuv420p,"
+             "-vf", f"{pre}scale=1080:1920:flags=lanczos,setsar=1,fps=30,format=yuv420p,"
                     f"ass={hook_front_ass}:fontsdir={FONTS_DIR}",
              "-c:v", "libx264", "-crf", "18", "-preset", "medium",
              "-color_range", "tv", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709",
@@ -183,6 +185,8 @@ def build_shnurok(
     ambiguous — that warning means "verify this, or pass talking_head=...".
     """
     folder = Path(folder)
+    broll_explicit = broll is not None
+    graphic_explicit = graphic is not None
     need_inventory = any(v is None for v in (talking_head, voice, broll, graphic, music))
     inv = inventory(folder) if need_inventory else {}
 
@@ -197,14 +201,41 @@ def build_shnurok(
 
     music = _resolve(folder, music) if music is not None else (inv["music"][0] if inv.get("music") else DEFAULT_MUSIC)
 
-    if broll is not None:
-        broll = order_broll([_resolve(folder, p) for p in broll])
+    if broll_explicit:
+        # Caller order is deliberate (the operating agent picked the beat
+        # order on purpose) — do NOT re-sort it. `order_broll` only applies
+        # to the inventory-derived fallback below, which has no meaningful
+        # order of its own yet.
+        broll = [_resolve(folder, p) for p in broll]
     else:
         broll = order_broll(_broll_fallback(inv, th))
     if not broll:
         raise ValueError("build_shnurok: no b-roll clips found in inventory (pass broll=[...] explicitly)")
 
-    graphic = _resolve(folder, graphic) if graphic is not None else (inv["graphic"][0] if inv.get("graphic") else None)
+    graphic = _resolve(folder, graphic) if graphic_explicit else (inv["graphic"][0] if inv.get("graphic") else None)
+
+    # Every resolved source must exist on disk before the slow stages run
+    # (transcription, matting, encoding) — otherwise a missing file surfaces
+    # much later as a cryptic downstream failure (e.g. "no integrated
+    # loudness in ebur128 output" when DEFAULT_MUSIC isn't present on a
+    # fresh clone) instead of a clear error naming the culprit.
+    for label, path in (("talking_head", th), ("voice", voice), ("music", music)):
+        if not path.exists():
+            raise FileNotFoundError(f"build_shnurok: {label} file not found: {path}")
+    if broll_explicit:
+        for p in broll:
+            if not p.exists():
+                raise FileNotFoundError(f"build_shnurok: broll file not found: {p}")
+    if graphic_explicit and not graphic.exists():
+        raise FileNotFoundError(f"build_shnurok: graphic file not found: {graphic}")
+
+    console.log(
+        "[bold cyan]resolved sources[/bold cyan] — "
+        f"talking_head=[white]{th}[/white] voice=[white]{voice}[/white] "
+        f"broll=[white]{len(broll)} clip(s)[/white] "
+        f"graphic=[white]{graphic if graphic is not None else 'none'}[/white] "
+        f"music=[white]{music}[/white]"
+    )
 
     slug = folder.name
     output_root = _load_output_root(config_path)

@@ -629,11 +629,35 @@ def validate(script: Path = typer.Argument(..., help="Path to script JSON")):
 def shnurok(
     folder: Path = typer.Argument(..., help="Folder with dropped sources for one reel"),
     style: str = typer.Option("both", help="classic | bold | both"),
+    talking_head: Optional[Path] = typer.Option(
+        None, "--talking-head",
+        help="Explicit talking-head clip (default: auto-picked from folder inventory).",
+    ),
+    voice: Optional[Path] = typer.Option(
+        None, "--voice",
+        help="Explicit voiceover audio file (default: auto-picked from folder inventory).",
+    ),
+    graphic: Optional[Path] = typer.Option(
+        None, "--graphic",
+        help="Explicit product/graphic image for the hook fly-in (default: auto-picked, or none).",
+    ),
+    music: Optional[Path] = typer.Option(
+        None, "--music",
+        help="Explicit music track (default: auto-picked from folder inventory, else config default).",
+    ),
+    broll: Optional[list[Path]] = typer.Option(
+        None, "--broll",
+        help="Explicit b-roll clip, repeatable, in the exact order to use "
+             "(default: auto-picked from folder inventory).",
+    ),
 ):
     """Assemble a SHNUROK/NUMERIS-style sneaker reel from dropped sources."""
     from .shnurok.build import build_shnurok
     styles = ("classic", "bold") if style == "both" else (style,)
-    outs = build_shnurok(folder, styles=styles)
+    outs = build_shnurok(
+        folder, styles=styles,
+        talking_head=talking_head, voice=voice, broll=broll, graphic=graphic, music=music,
+    )
     for st, path in outs.items():
         console.print(f"[green]{st}[/green] -> {path}")
 

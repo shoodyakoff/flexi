@@ -2,6 +2,9 @@
 
 Plain CFR cut of the talking-head CTA span, with the bold style's
 white flash-in applied (matching the body-beat treatment for that style).
+HDR->SDR tonemapping (see `src/shnurok/media.py`) is inherited for free from
+`enc_cut`, which tonemaps based on `src` (here, the talking-head clip `th`)
+before every scale chain — no separate handling needed here.
 """
 from __future__ import annotations
 

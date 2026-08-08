@@ -11,6 +11,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from .media import source_tonemap_prefix
+
 
 def enc_cut(out, src, off, dur, flash=False, punch=False, slowzoom=False, loop=False):
     """Cut `dur` seconds of `src` starting at `off`, encode to the shared CFR
@@ -20,13 +22,19 @@ def enc_cut(out, src, off, dur, flash=False, punch=False, slowzoom=False, loop=F
     to fill it exactly, instead of leaving the concat short and desyncing
     everything after it. CTA/hook cuts never loop — their `-ss` window into
     the talking-head clip must stay an exact, un-repeated slice.
+
+    `src` may be 10-bit HLG/PQ (iPhone HDR footage) — `pre` tonemaps it to
+    SDR bt709 before the scale chain; SDR sources get an empty (no-op)
+    prefix.
     """
+    pre = source_tonemap_prefix(src)
     vf = ["scale=1080:1920:flags=lanczos", "setsar=1", "fps=30"]
     if punch:
         vf += ["crop=iw/1.13:ih/1.13:x=(iw-ow)/2:y=(ih-oh)*0.40", "scale=1080:1920:flags=lanczos"]
     if slowzoom:
         vf = ["scale=2160:3840:flags=lanczos", "setsar=1", "fps=30",
               "zoompan=z='min(1+0.0008*on,1.07)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30"]
+    vf[0] = pre + vf[0]
     vf.append("format=yuv420p")
     if flash:
         vf.append("fade=t=in:st=0:d=0.07:color=white")
