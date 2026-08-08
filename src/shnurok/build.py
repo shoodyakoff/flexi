@@ -262,7 +262,7 @@ def build_shnurok(
 
         # a. hook titles
         hook_words_rel = [(s - hook_s, e - hook_s, w) for (s, e, w) in th_words if hook_s <= s < hook_e]
-        front = hook_lines_from_words(hook_words_rel)
+        front = hook_lines_from_words(hook_words_rel, font_size=style.hook_size)
         hook_front_ass = out_dir / f"hook_front_{style_id}.ass"
         hook_titles_ass(front, None, style, hook_front_ass)
 
@@ -290,7 +290,7 @@ def build_shnurok(
         cta_words_final = [
             (s - cta_s + cta_off, e - cta_s + cta_off, w) for (s, e, w) in th_words if cta_s <= s < cta_e
         ]
-        screens = cta_screens_from_words(cta_words_final)
+        screens = cta_screens_from_words(cta_words_final, font_size=style.cta_size)
         cta_ass = out_dir / f"cta_titles_{style_id}.ass"
         cta_titles_ass(screens, style, cta_ass)
 
