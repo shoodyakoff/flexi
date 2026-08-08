@@ -12,7 +12,9 @@
 | **Демо продукта** *(ref-style — в разработке)* | `render_ref_style_directed.py` | Смысловой режиссёр раскладывает транскрипт по 5 визуальным форматам с продуктовым b-roll, подписями, музыкой. |
 | **Много рилсов** *(Reel Matrix — в разработке)* | `reel_matrix.py` | Из сменных блоков (вступления × серединки × концовки) собирает все сочетания — множество уникальных рилсов. |
 | **Динамичный рилс** *(3-strip)* | `three_strip/build_3strip.zsh` | Три горизонтальных клипа, сложенных в 9:16, асинхронный каскад. Управляется конфигом. |
+| **shnurok** *(рекламный рилс кроссовок)* | `src/cli.py` (`python -m src.cli shnurok`) | Хук (говорящая голова + титры-лесенка + влёт графики) → тело (b-roll под готовую озвучку + пословные сабы) → CTA. Стили classic/bold. Плейбук: `shnurok/README.md`. |
 | **QA (ref-style)** | `qa_ref_style.py` | Проверяет готовое видео: спецификацию, мёртвый эфир, размытие HDR, подписи, громкость. |
+| **QA (shnurok)** | `qa_shnurok.py` | Проверяет готовое видео: пословные сабы без наложения, формат, аудио-дедуп. |
 
 Каждая точка входа на Python поддерживает `--help`. Смотрите `../docs/modes.md`
 о том, как стадии связываются друг с другом, и `../CLAUDE.md` о том, когда какой
@@ -39,4 +41,8 @@ zsh pipelines/three_strip/build_3strip.zsh pipelines/three_strip/episodes/exampl
 
 # QA готового видео
 python pipelines/qa_ref_style.py --final output/<slug>/final.mp4
+
+# shnurok (закиньте исходники одного ролика в одну папку, см. shnurok/README.md)
+python -m src.cli shnurok assets/shnurok_test --style both
+python pipelines/qa_shnurok.py --slug shnurok_test
 ```
