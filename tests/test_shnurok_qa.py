@@ -35,6 +35,38 @@ def test_overlapping_subs_flagged(tmp_path):
     assert len(qa.check_single_word_subs(bad)) == 1
 
 
+_TITLE_HEADER = (
+    "[V4+ Styles]\n"
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+    "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, "
+    "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+    "Style: T,Gilroy Heavy,126,&H00FFFFFF,&H000000FF,&H00101010,&H00000000,0,0,0,0,100,100,2,0,1,0,0,7,0,0,0,1\n\n"
+    "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+)
+
+
+def test_title_bounds_pass_when_inside_frame(tmp_path):
+    """A short left-anchored title well inside the frame passes."""
+    ok = tmp_path / "ok.ass"
+    ok.write_text(
+        _TITLE_HEADER
+        + "Dialogue: 1,0:00:00.05,0:00:03.30,T,,0,0,0,,{\\an7\\pos(120,300)}НАДОЕЛИ\n",
+        encoding="utf-8"
+    )
+    assert qa.check_title_bounds(ok) == []
+
+
+def test_title_bounds_flags_offscreen(tmp_path):
+    """A wide title positioned far right runs off the frame -> flagged."""
+    bad = tmp_path / "bad.ass"
+    bad.write_text(
+        _TITLE_HEADER
+        + "Dialogue: 1,0:00:00.05,0:00:03.30,T,,0,0,0,,{\\an7\\pos(700,300)}НАДОЕЛИ КРОССОВКИ\n",
+        encoding="utf-8"
+    )
+    assert len(qa.check_title_bounds(bad)) == 1
+
+
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg missing")
 def test_qa_video_accepts_1080x1920(tmp_path):
     """qa_video should accept 1080×1920 resolution."""

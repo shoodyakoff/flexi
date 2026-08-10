@@ -8,12 +8,18 @@ style's body subs overlapping) must not slip through because the other
 style happened to pass.
 
 Checks (per style):
-  • WORD_SUBS — word-by-word subtitle timing: end[i] <= start[i+1] (no overlap)
-  • FORMAT    — resolution == 1080x1920, duration >= 1s, and color transfer is
-                NOT HDR (arib-std-b67/smpte2084) — an HDR-tagged final means
-                the source's HDR->SDR tonemap (src/shnurok/media.py) was
-                skipped, producing washed/flat output
-  • DEDUP     — transcribed final audio has no back-to-back duplicate words
+  • WORD_SUBS   — word-by-word subtitle timing: end[i] <= start[i+1] (no overlap)
+  • TITLE_BOUNDS— hook/CTA big-title boxes stay inside the safe frame (catches
+                  titles clipped/running off the right edge — a visual defect the
+                  timing/format gates can't see)
+  • FORMAT      — resolution == 1080x1920, duration >= 1s, and color transfer is
+                  NOT HDR (arib-std-b67/smpte2084) — an HDR-tagged final means
+                  the source's HDR->SDR tonemap (src/shnurok/media.py) was
+                  skipped, producing washed/flat output
+  • DEDUP       — transcribed final audio has no back-to-back duplicate words
+
+TITLE_BOUNDS is geometry-only: it verifies titles fit the frame, NOT that their
+line breaks are semantically sensible (that stays a manual/visual review).
 
 Invocation:
     python3 pipelines/qa_shnurok.py --slug <slug>
@@ -111,6 +117,71 @@ def check_single_word_subs(ass_path: Path | str) -> list[str]:
             )
 
     return violations
+
+
+def check_title_bounds(ass_path: Path | str, safe_x: int = 16, safe_top: int = 20,
+                       safe_bottom: int = 40, play_w: int = 1080, play_h: int = 1920) -> list[str]:
+    """Flag big-title (Style==T) events whose estimated box leaves the safe frame.
+
+    Parses each title Dialogue's alignment (\\anN), position (\\pos(x,y)) and font
+    size (\\fsN override, else the Style's Fontsize), estimates the text box with
+    the same width model the planner uses to clamp, and reports any box crossing
+    the safe margins. Catches clipped / off-frame titles (a visual defect). Does
+    NOT judge line-break quality. Empty list = pass.
+    """
+    ass_path = Path(ass_path)
+    if not ass_path.exists():
+        return [f"ASS file not found: {ass_path}"]
+    from src.shnurok.titleplan import _est_width
+
+    text = ass_path.read_text(encoding="utf-8", errors="replace")
+    default_fs = 100
+    for line in text.splitlines():
+        if line.startswith("Style:"):
+            f = [p.strip() for p in line[len("Style:"):].split(",")]
+            if f and f[0] == "T":
+                try:
+                    default_fs = int(float(f[2]))
+                except (IndexError, ValueError):
+                    pass
+
+    vio: list[str] = []
+    for line in text.splitlines():
+        if not line.startswith("Dialogue:"):
+            continue
+        parts = line.split(",", 9)
+        if len(parts) < 10 or parts[3].strip() != "T":
+            continue
+        raw = parts[9]
+        pos_m = re.search(r"\\pos\((\d+),(\d+)\)", raw)
+        if not pos_m:
+            continue
+        an = int(m.group(1)) if (m := re.search(r"\\an(\d)", raw)) else 7
+        x, y = int(pos_m.group(1)), int(pos_m.group(2))
+        fs = int(m.group(1)) if (m := re.search(r"\\fs(\d+)", raw)) else default_fs
+        disp = re.sub(r"\{[^}]*\}", "", raw).strip()
+        if not disp:
+            continue
+        w = _est_width(disp, fs)
+        h = fs * 1.2
+        if an in (7, 4, 1):      # left-anchored
+            left, right = x, x + w
+        elif an in (9, 6, 3):    # right-anchored
+            left, right = x - w, x
+        else:                     # centered
+            left, right = x - w / 2, x + w / 2
+        if an in (7, 8, 9):      # top
+            top, bottom = y, y + h
+        elif an in (1, 2, 3):    # bottom
+            top, bottom = y - h, y
+        else:                     # middle
+            top, bottom = y - h / 2, y + h / 2
+        if left < safe_x or right > play_w - safe_x or top < safe_top or bottom > play_h - safe_bottom:
+            vio.append(
+                f"«{disp[:24]}» box [{int(left)},{int(top)}..{int(right)},{int(bottom)}] "
+                f"outside safe frame ({safe_x}..{play_w - safe_x} x {safe_top}..{play_h - safe_bottom})"
+            )
+    return vio
 
 
 def qa_video(path: Path | str) -> dict:
@@ -234,6 +305,23 @@ def main() -> int:
         else:
             print(f"  WORD_SUBS: skipped (no {ass_file.name})")
 
+        # Check title bounds (hook + CTA sidecar ASS) — titles must fit the frame
+        title_vio = []
+        checked_any = False
+        for tname in (f"hook_front_{style}.ass", f"cta_titles_{style}.ass"):
+            tp = d / tname
+            if tp.exists():
+                checked_any = True
+                title_vio += [f"{tname}: {v}" for v in check_title_bounds(tp)]
+        if not checked_any:
+            print(f"  TITLE_BOUNDS: skipped (no hook_front_{style}.ass / cta_titles_{style}.ass)")
+        elif title_vio:
+            print(f"  TITLE_BOUNDS: FAIL")
+            for v in title_vio[:6]:
+                print(f"    - {v}")
+        else:
+            print(f"  TITLE_BOUNDS: PASS ✓")
+
         # Check format (resolution, duration, HDR)
         fmt = qa_video(final_video)
         if fmt["violations"]:
@@ -255,7 +343,7 @@ def main() -> int:
         else:
             print(f"  DEDUP: PASS ✓")
 
-        total_vio = len(word_sub_vio) + len(fmt["violations"]) + len(dedup_vio)
+        total_vio = len(word_sub_vio) + len(title_vio) + len(fmt["violations"]) + len(dedup_vio)
         if total_vio:
             print(f"  [{style}] ИТОГ: FAIL ({total_vio} violations)")
             any_fail = True
