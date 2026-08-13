@@ -37,6 +37,7 @@ from .broll_preview import render_broll_preview
 from .advanced_runtime import build_block_plan
 from .diagnostics import write_render_diagnostics
 from .hook_montage import hook_effect_end_sec, render_hook_montage
+from .meme_video import ROOT
 from .output_paths import latest_version_dir, seed_reusable, versioned_dir
 from .rhythm_planner import plan_broll
 from .schemas import (
@@ -663,7 +664,7 @@ def shnurok(
 
 @app.command()
 def meme(
-    source: Path = typer.Argument(..., help="Мем-исходник (или имя под MEME_DRAFT_ROOT)"),
+    source: Path = typer.Argument(..., help="Мем-исходник"),
     pairs: Path = typer.Option(..., "--pairs", help="YAML со списком {a, b?} — подписи сцен"),
     series: str = typer.Option(..., "--series", help="Имя серии = папка публикации и slug"),
     faces: Optional[Path] = typer.Option(None, "--faces", help="Папка-пул лиц (default: MEME_FACES_DIR)"),
@@ -681,7 +682,12 @@ def meme(
         run_batch,
     )
 
-    faces_dir = faces or Path(os.environ.get("MEME_FACES_DIR", "assets/broll"))
+    if faces is not None:
+        faces_dir = faces
+    elif os.environ.get("MEME_FACES_DIR"):
+        faces_dir = Path(os.environ["MEME_FACES_DIR"])
+    else:
+        faces_dir = ROOT / "assets" / "broll"
     plan_path = plan or source.with_suffix(source.suffix + ".plan.json")
     the_plan = load_plan(plan_path)
     the_pairs = load_pairs(pairs)
@@ -692,7 +698,7 @@ def meme(
     finals = run_batch(
         plan=the_plan, pairs=the_pairs, faces=pool, series=series, seed=seed,
         cfg=caption_cfg_from_config(cfg),
-        work_root=Path("output") / "meme", publish_root=Path("output") / "meme_publish",
+        work_root=ROOT / "output" / "meme", publish_root=ROOT / "output" / "meme_publish",
     )
     for f in finals:
         console.print(f"[green]✓[/green] {f}")
