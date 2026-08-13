@@ -8,6 +8,7 @@ from src.meme_machine import (
     scene_a_length, audio_start,
 )
 from src.meme_machine import collect_face_clips, parse_faces_subset, assign_faces
+from src.meme_machine import build_face_scene_command, build_punch_scene_command
 
 
 def test_scene_a_length_clips_to_drop_when_face_longer() -> None:
@@ -80,3 +81,34 @@ def test_assign_faces_is_deterministic_and_cycles(tmp_path: Path) -> None:
 def test_assign_faces_changes_with_seed(tmp_path: Path) -> None:
     faces = [tmp_path / f"{i}.mp4" for i in range(1, 6)]
     assert assign_faces(5, faces, seed=1) != assign_faces(5, faces, seed=2)
+
+
+def test_face_scene_uses_source_audio_window_and_face_video(tmp_path: Path) -> None:
+    cmd = build_face_scene_command(
+        face_path=tmp_path / "face.mp4",
+        source_path=tmp_path / "src.mp4",
+        output_path=tmp_path / "sceneA.mp4",
+        scene_a_len=2.5,
+        audio_start=0.9,
+    )
+    joined = " ".join(cmd)
+    assert cmd[:3] == ["ffmpeg", "-nostdin", "-y"]
+    assert "-ss 0.900" in joined                       # пред-seek аудио исходника к T-a
+    assert "[1:v]" in joined and "scale=1080:1920:force_original_aspect_ratio=increase" in joined
+    assert "crop=1080:1920" in joined
+    assert "[0:a]atrim=start=0:duration=2.500" in joined  # звук исходника, окно длиной a
+    assert "[1:a]" not in joined                        # звук лица выключен
+    assert "hflip" not in joined
+
+
+def test_punch_scene_seeks_to_drop_and_keeps_audio(tmp_path: Path) -> None:
+    cmd = build_punch_scene_command(
+        source_path=tmp_path / "src.mp4",
+        output_path=tmp_path / "sceneB.mp4",
+        drop_at=3.4,
+    )
+    joined = " ".join(cmd)
+    assert "-ss 3.400" in joined
+    assert "[0:a]" in joined                            # звук панча из исходника
+    assert "scale=1080:1920:force_original_aspect_ratio=increase" in joined
+    assert "hflip" not in joined

@@ -10,6 +10,7 @@ from pathlib import Path
 import yaml
 
 from src.meme_video import Box, W, H, FPS, VIDEO_EXTENSIONS, _sort_key  # переиспользуем константы/типы
+from src.meme_video import _video_normalize_filter
 
 
 @dataclass(frozen=True)
@@ -98,3 +99,53 @@ def assign_faces(n: int, faces: list[Path], seed: int) -> list[Path]:
     shuffled = faces[:]
     rng.shuffle(shuffled)
     return [shuffled[i % len(shuffled)] for i in range(n)]
+
+
+_ENC = [
+    "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+    "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+]
+
+
+def build_face_scene_command(
+    *,
+    face_path: Path,
+    source_path: Path,
+    output_path: Path,
+    scene_a_len: float,
+    audio_start: float,
+) -> list[str]:
+    dur = f"{scene_a_len:.3f}"
+    astart = f"{audio_start:.3f}"
+    filter_complex = (
+        f"[1:v]{_video_normalize_filter()}[v];"
+        f"[0:a]atrim=start=0:duration={dur},asetpts=PTS-STARTPTS,"
+        "aformat=sample_rates=48000:channel_layouts=stereo[a]"
+    )
+    return [
+        "ffmpeg", "-nostdin", "-y",
+        "-ss", astart, "-t", dur, "-i", str(source_path),   # звук исходника (окно [T-a, T])
+        "-t", dur, "-i", str(face_path),                    # видео лица (обрезано до a)
+        "-filter_complex", filter_complex,
+        "-map", "[v]", "-map", "[a]",
+        *_ENC, str(output_path),
+    ]
+
+
+def build_punch_scene_command(
+    *,
+    source_path: Path,
+    output_path: Path,
+    drop_at: float,
+) -> list[str]:
+    filter_complex = (
+        f"[0:v]{_video_normalize_filter()}[v];"
+        "[0:a]asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo[a]"
+    )
+    return [
+        "ffmpeg", "-nostdin", "-y",
+        "-ss", f"{drop_at:.3f}", "-i", str(source_path),
+        "-filter_complex", filter_complex,
+        "-map", "[v]", "-map", "[a]",
+        *_ENC, str(output_path),
+    ]
