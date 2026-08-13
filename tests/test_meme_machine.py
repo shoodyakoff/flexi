@@ -114,7 +114,7 @@ def test_punch_scene_seeks_to_drop_and_keeps_audio(tmp_path: Path) -> None:
     assert "hflip" not in joined
 
 
-from src.meme_video import Box
+from src.meme_video import Box, text_for_overlay
 from src.meme_machine import (
     VariantLook, MemeCaptionCfg, variant_look, build_caption_overlay_command,
 )
@@ -147,11 +147,13 @@ def test_overlay_draws_caption_a_and_skips_kept_punch(tmp_path: Path) -> None:
         Beat("setup", "face", "top", "own"),
         Beat("punch", "source", "top", "keep"),
     ])
+    pair = CaptionPair(a="сетап", b=None)
     cmd = build_caption_overlay_command(
         input_path=tmp_path / "in.mp4", output_path=tmp_path / "out.mp4",
         total_dur=6.0, scene_a_len=3.4, plan=plan,
-        pair=CaptionPair(a="сетап", b=None),
+        pair=pair,
         look=VariantLook(color="white", font_file=tmp_path / "bold.ttf"), cfg=cfg,
+        work_dir=tmp_path,
     )
     joined = " ".join(cmd)
     assert "drawtext=" in joined
@@ -159,6 +161,15 @@ def test_overlay_draws_caption_a_and_skips_kept_punch(tmp_path: Path) -> None:
     assert "enable='between(t,0.000,3.400)'" in joined  # подпись A на сцене A
     assert joined.count("drawtext=") == 1               # панч keep -> подпись B не рисуется
     assert "hflip" not in joined
+    # регрессия на .notdef-баг: текст читается из файла, а не инлайном
+    assert "textfile=" in joined
+    assert "text='" not in joined                       # нет инлайн-текста
+    assert "\n" not in joined                           # сырой перевод строки не течёт в argv
+    cap_a = tmp_path / "cap_a.txt"
+    assert cap_a.exists()
+    assert cap_a.read_text(encoding="utf-8") == text_for_overlay(
+        pair.a, max_chars_per_line=cfg.max_chars_per_line
+    )
 
 
 def test_overlay_draws_caption_b_with_cover_when_overlay_mode(tmp_path: Path) -> None:
@@ -167,17 +178,32 @@ def test_overlay_draws_caption_b_with_cover_when_overlay_mode(tmp_path: Path) ->
         Beat("setup", "face", "top", "own"),
         Beat("punch", "source", "top", "overlay", cover=Box(x=0, y=1400, w=1080, h=300)),
     ])
+    pair = CaptionPair(a="сетап", b="панч")
     cmd = build_caption_overlay_command(
         input_path=tmp_path / "in.mp4", output_path=tmp_path / "out.mp4",
         total_dur=6.0, scene_a_len=3.4, plan=plan,
-        pair=CaptionPair(a="сетап", b="панч"),
+        pair=pair,
         look=VariantLook(color="#FFD400", font_file=tmp_path / "bold.ttf"), cfg=cfg,
+        work_dir=tmp_path,
     )
     joined = " ".join(cmd)
     assert joined.count("drawtext=") == 2               # A + B
     assert "drawbox=x=0:y=1400:w=1080:h=300" in joined  # плашка-крышка под B
     assert "enable='between(t,3.400,6.000)'" in joined  # подпись B на сцене B
     assert "fontcolor=#FFD400" in joined
+    # регрессия на .notdef-баг: обе подписи читаются из файлов
+    assert "textfile=" in joined
+    assert "text='" not in joined                       # нет инлайн-текста
+    assert "\n" not in joined                           # сырой перевод строки не течёт в argv
+    cap_a = tmp_path / "cap_a.txt"
+    cap_b = tmp_path / "cap_b.txt"
+    assert cap_a.exists() and cap_b.exists()
+    assert cap_a.read_text(encoding="utf-8") == text_for_overlay(
+        pair.a, max_chars_per_line=cfg.max_chars_per_line
+    )
+    assert cap_b.read_text(encoding="utf-8") == text_for_overlay(
+        pair.b, max_chars_per_line=cfg.max_chars_per_line
+    )
 
 
 from src.meme_machine import plan_variants, MemeVariant

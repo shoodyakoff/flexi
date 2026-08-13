@@ -188,33 +188,39 @@ def _box_for(pos: str, cfg: MemeCaptionCfg) -> Box:
     return cfg.top_box if pos == "top" else cfg.bottom_box
 
 
-def _drawtext(*, text: str, look: VariantLook, box: Box, cfg: MemeCaptionCfg, enable: str) -> str:
+def _drawtext(
+    *, text: str, look: VariantLook, box: Box, cfg: MemeCaptionCfg, enable: str, text_file: Path
+) -> str:
     lines = text_for_overlay(text, max_chars_per_line=cfg.max_chars_per_line)
-    tmp = box  # текст вписан по центру бокса
+    # Читаем многострочный текст из файла (textfile=), а не инлайном (text=): сырой
+    # перевод строки внутри text='...' этот билд ffmpeg рисует как .notdef-глиф —
+    # квадрат «нет глифа» на каждом переносе. Проверенный паттерн из meme_video.
+    Path(text_file).write_text(lines, encoding="utf-8")
     return (
         "drawtext="
         f"fontfile={_filter_path(look.font_file)}:"
-        f"text='{lines.replace(chr(39), chr(92) + chr(39))}':"
+        f"textfile={_filter_path(text_file)}:"
         f"fontcolor={look.color}:"
         f"fontsize={cfg.font_size}:line_spacing=8:"
         "borderw=6:bordercolor=black@0.85:shadowx=2:shadowy=2:shadowcolor=black@0.5:"
         "text_align=C:"
-        f"x=(w-text_w)/2:y={tmp.y}+({tmp.h}-text_h)/2:"
+        f"x=(w-text_w)/2:y={box.y}+({box.h}-text_h)/2:"
         f"enable='{enable}'"
     )
 
 
 def build_caption_overlay_command(*, input_path, output_path, total_dur, scene_a_len,
-                                  plan, pair, look, cfg):
+                                  plan, pair, look, cfg, work_dir: Path):
     a_end = f"{scene_a_len:.3f}"
     total = f"{total_dur:.3f}"
     setup_beat, punch_beat = plan.beats[0], plan.beats[1]
+    Path(work_dir).mkdir(parents=True, exist_ok=True)
     filters: list[str] = []
 
     # подпись A на сцене A
     filters.append(_drawtext(
         text=pair.a, look=look, box=_box_for(setup_beat.caption_pos, cfg), cfg=cfg,
-        enable=f"between(t,0.000,{a_end})",
+        enable=f"between(t,0.000,{a_end})", text_file=work_dir / "cap_a.txt",
     ))
 
     # подпись B на сцене B (только режим overlay + текст задан)
@@ -224,7 +230,7 @@ def build_caption_overlay_command(*, input_path, output_path, total_dur, scene_a
             filters.append(punch_beat.cover.drawbox_filter("black", enable=enable_b))
         filters.append(_drawtext(
             text=pair.b, look=look, box=_box_for(punch_beat.caption_pos, cfg), cfg=cfg,
-            enable=enable_b,
+            enable=enable_b, text_file=work_dir / "cap_b.txt",
         ))
 
     filters += ["setpts=PTS-STARTPTS", "format=yuv420p"]
@@ -295,7 +301,7 @@ def build_variant(*, variant, plan, look, cfg, work_dir):
     total = probe_duration(dedup)
     run_command(build_caption_overlay_command(
         input_path=dedup, output_path=final, total_dur=total, scene_a_len=a_len,
-        plan=plan, pair=variant.pair, look=look, cfg=cfg,
+        plan=plan, pair=variant.pair, look=look, cfg=cfg, work_dir=job,
     ))
     run_command(build_qa_sheet_command(final, qa))
     variant.final_path.parent.mkdir(parents=True, exist_ok=True)
