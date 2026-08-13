@@ -200,3 +200,16 @@ def test_plan_variants_names_and_assigns_faces(tmp_path: Path) -> None:
     # повторяемость назначения
     again = plan_variants(pairs=pairs, faces=faces, seed=7, publish_dir=tmp_path / "pub")
     assert [v.face_path for v in variants] == [v.face_path for v in again]
+
+
+from src.schemas import load_config
+from src.meme_machine import caption_cfg_from_config, MemeCaptionCfg
+
+
+def test_config_yaml_exposes_meme_caption_defaults() -> None:
+    cfg = load_config()               # грузит config.yaml как есть
+    mc = caption_cfg_from_config(cfg)
+    assert isinstance(mc, MemeCaptionCfg)
+    assert len(mc.palette) >= 3       # ≥3 цвета для дедупа
+    assert mc.bold_cycle              # непусто
+    assert mc.font_regular.suffix == ".ttf"

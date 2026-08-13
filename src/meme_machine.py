@@ -12,6 +12,7 @@ from pathlib import Path
 import yaml
 
 from src.meme_video import Box, W, H, FPS, VIDEO_EXTENSIONS, _sort_key  # переиспользуем константы/типы
+from src.meme_video import ROOT as _ROOT  # корень проекта для резолва путей шрифтов
 from src.meme_video import _video_normalize_filter
 from src.meme_video import _filter_path, text_for_overlay
 from src.meme_video import (
@@ -311,3 +312,22 @@ def run_batch(*, plan, pairs, faces, series, seed, cfg, work_root, publish_root)
         look = variant_look(v.index - 1, cfg)
         finals.append(build_variant(variant=v, plan=plan, look=look, cfg=cfg, work_dir=work_dir))
     return finals
+
+
+def caption_cfg_from_config(cfg) -> MemeCaptionCfg:
+    """Map the pydantic MemeConfig (cfg.meme) into a MemeCaptionCfg.
+
+    Relative font paths resolve against the project root; absolute paths pass through.
+    """
+    m = cfg.meme
+
+    def _p(rel: str) -> Path:
+        p = Path(rel)
+        return p if p.is_absolute() else _ROOT / p
+
+    return MemeCaptionCfg(
+        font_regular=_p(m.font_regular), font_bold=_p(m.font_bold),
+        palette=list(m.palette), bold_cycle=list(m.bold_cycle),
+        top_box=Box(*m.top_box), bottom_box=Box(*m.bottom_box),
+        font_size=m.font_size, max_chars_per_line=m.max_chars_per_line,
+    )

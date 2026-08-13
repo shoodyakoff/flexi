@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal, Optional
 
+import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 MotionProfileName = Literal["off", "calm", "balanced", "dynamic", "aggressive"]
@@ -1055,6 +1057,20 @@ class TitleOverlayConfig(BaseModel):
     default_title: Optional[str] = None
 
 
+class MemeConfig(BaseModel):
+    # Caption look for the "meme machine" route (#7). font_regular/font_bold are
+    # a single family at two weights (Bold↔Heavy) — the weight contrast is what
+    # the dedup-driven bold_cycle needs. Relative paths resolve against repo root.
+    font_regular: str = "assets/fonts/GilroyBold.ttf"
+    font_bold: str = "assets/fonts/GilroyHeavy.ttf"
+    palette: list[str] = ["white", "#FFD400", "#00E0FF"]
+    bold_cycle: list[bool] = [True, False, True]
+    top_box: list[int] = [40, 130, 1000, 380]
+    bottom_box: list[int] = [40, 1410, 1000, 380]
+    font_size: int = 74
+    max_chars_per_line: int = 20
+
+
 class Config(BaseModel):
     output_dir: str
     video: VideoConfig
@@ -1071,6 +1087,7 @@ class Config(BaseModel):
     hook_montage: HookMontageConfig = HookMontageConfig()
     render_guardrails: RenderGuardrailsConfig = RenderGuardrailsConfig()
     broll_rotation: BrollRotationConfig = BrollRotationConfig()
+    meme: MemeConfig = MemeConfig()
     beat: BeatConfig = BeatConfig()
     subtitle_safe_box: SubtitleSafeBoxConfig = SubtitleSafeBoxConfig()
     title_overlay: TitleOverlayConfig = TitleOverlayConfig()
@@ -1079,3 +1096,10 @@ class Config(BaseModel):
     subtitle_corrections: dict[str, str] = Field(default_factory=dict)
     whisper: WhisperConfig = WhisperConfig()
     tts: TTSConfig = TTSConfig()
+
+
+def load_config() -> Config:
+    """Load the repo-root config.yaml into the Config model (single loader)."""
+    config_path = Path(__file__).resolve().parent.parent / "config.yaml"
+    raw = yaml.safe_load(config_path.read_text())
+    return Config(**raw)

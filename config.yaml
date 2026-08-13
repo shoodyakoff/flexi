@@ -268,6 +268,19 @@ broll_rotation:
   recent_start_penalty: 18.0
   recent_anywhere_penalty: 6.0
 
+# Meme machine route (#7): caption look for face+punch variants.
+# font_regular/font_bold are one Gilroy family at two weights (Bold↔Heavy) —
+# the weight contrast drives the dedup bold_cycle. Paths resolve from repo root.
+meme:
+  font_regular: assets/fonts/GilroyBold.ttf
+  font_bold: assets/fonts/GilroyHeavy.ttf
+  palette: ["white", "#FFD400", "#00E0FF"]   # 3 цвета для дедупа; подбирать под кадр
+  bold_cycle: [true, false, true]
+  top_box: [40, 130, 1000, 380]
+  bottom_box: [40, 1410, 1000, 380]
+  font_size: 74
+  max_chars_per_line: 20
+
 annotation:
   ingest_dir: "assets/broll_ingest"
   normalize_new_clips: true

@@ -47,6 +47,7 @@ from .schemas import (
     SubtitleStyle,
     Transcript,
     VideoScript,
+    load_config,
 )
 from .subtitles import subtitle_diagnostics, transcript_to_ass
 from .transcribe import align_to_text
@@ -56,7 +57,6 @@ from .tts import synthesize
 app = typer.Typer(name="factory", add_completion=False)
 console = Console()
 
-CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
 _TTS_PRESETS = {
     "v2": {
         "model_id": "eleven_multilingual_v2",
@@ -70,8 +70,7 @@ _TTS_PRESETS = {
 
 
 def _load_config() -> Config:
-    raw = yaml.safe_load(CONFIG_PATH.read_text())
-    return Config(**raw)
+    return load_config()
 
 
 def _load_script(script_path: Path) -> VideoScript:
@@ -660,6 +659,43 @@ def shnurok(
     )
     for st, path in outs.items():
         console.print(f"[green]{st}[/green] -> {path}")
+
+
+@app.command()
+def meme(
+    source: Path = typer.Argument(..., help="Мем-исходник (или имя под MEME_DRAFT_ROOT)"),
+    pairs: Path = typer.Option(..., "--pairs", help="YAML со списком {a, b?} — подписи сцен"),
+    series: str = typer.Option(..., "--series", help="Имя серии = папка публикации и slug"),
+    faces: Optional[Path] = typer.Option(None, "--faces", help="Папка-пул лиц (default: MEME_FACES_DIR)"),
+    plan: Optional[Path] = typer.Option(None, "--plan", help="JSON мем-плана (default: <source>.plan.json)"),
+    faces_subset: Optional[str] = typer.Option(None, "--faces-subset", help='напр. "1,3,5,10-99"'),
+    seed: int = typer.Option(0, "--seed", help="Сид назначения лиц (повторяемость)"),
+):
+    """Собрать N мем-вариантов: лицо из пула + подписи, дедуп, публикация."""
+    from .meme_machine import (
+        caption_cfg_from_config,
+        collect_face_clips,
+        load_pairs,
+        load_plan,
+        parse_faces_subset,
+        run_batch,
+    )
+
+    faces_dir = faces or Path(os.environ.get("MEME_FACES_DIR", "assets/broll"))
+    plan_path = plan or source.with_suffix(source.suffix + ".plan.json")
+    the_plan = load_plan(plan_path)
+    the_pairs = load_pairs(pairs)
+    pool = collect_face_clips(faces_dir)
+    if faces_subset:
+        pool = parse_faces_subset(faces_subset, pool)
+    cfg = load_config()
+    finals = run_batch(
+        plan=the_plan, pairs=the_pairs, faces=pool, series=series, seed=seed,
+        cfg=caption_cfg_from_config(cfg),
+        work_root=Path("output") / "meme", publish_root=Path("output") / "meme_publish",
+    )
+    for f in finals:
+        console.print(f"[green]✓[/green] {f}")
 
 
 def _ffprobe_duration(path: Path) -> float:
