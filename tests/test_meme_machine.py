@@ -7,6 +7,7 @@ from src.meme_machine import (
     Beat, MemePlan, CaptionPair, load_plan, load_pairs,
     scene_a_length, audio_start,
 )
+from src.meme_machine import collect_face_clips, parse_faces_subset, assign_faces
 
 
 def test_scene_a_length_clips_to_drop_when_face_longer() -> None:
@@ -50,3 +51,32 @@ def test_load_pairs_allows_missing_b(tmp_path: Path) -> None:
     pairs = load_pairs(p)
     assert pairs == [CaptionPair(a="первый сетап", b="первый панч"),
                      CaptionPair(a="второй сетап", b=None)]
+
+
+def test_collect_face_clips_sorts_and_ignores_non_video(tmp_path: Path) -> None:
+    for name in ["2.mp4", "10.mov", "1.mp4", ".DS_Store", "note.txt", "7.mov"]:
+        (tmp_path / name).write_text("x")
+    files = collect_face_clips(tmp_path)
+    assert [f.name for f in files] == ["1.mp4", "2.mp4", "7.mov", "10.mov"]
+
+
+def test_parse_faces_subset_supports_lists_and_ranges(tmp_path: Path) -> None:
+    for name in ["1.mp4", "2.mp4", "3.mp4", "5.mp4", "11.mp4", "12.mp4"]:
+        (tmp_path / name).write_text("x")
+    avail = collect_face_clips(tmp_path)
+    picked = parse_faces_subset("1,3,11-99", avail)
+    assert [f.name for f in picked] == ["1.mp4", "3.mp4", "11.mp4", "12.mp4"]
+
+
+def test_assign_faces_is_deterministic_and_cycles(tmp_path: Path) -> None:
+    faces = [tmp_path / f"{i}.mp4" for i in range(1, 4)]  # 3 лица
+    a = assign_faces(n=5, faces=faces, seed=42)
+    b = assign_faces(n=5, faces=faces, seed=42)
+    assert a == b                      # повторяемо
+    assert len(a) == 5                 # 5 назначений на 3 лица
+    assert set(a) <= set(faces)
+
+
+def test_assign_faces_changes_with_seed(tmp_path: Path) -> None:
+    faces = [tmp_path / f"{i}.mp4" for i in range(1, 6)]
+    assert assign_faces(5, faces, seed=1) != assign_faces(5, faces, seed=2)

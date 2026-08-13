@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+import random
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
-from src.meme_video import Box, W, H, FPS  # переиспользуем константы/типы
+from src.meme_video import Box, W, H, FPS, VIDEO_EXTENSIONS, _sort_key  # переиспользуем константы/типы
 
 
 @dataclass(frozen=True)
@@ -58,3 +60,41 @@ def load_plan(path: Path) -> MemePlan:
 def load_pairs(path: Path) -> list[CaptionPair]:
     rows = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or []
     return [CaptionPair(a=str(r["a"]).strip(), b=(str(r["b"]).strip() if r.get("b") else None)) for r in rows]
+
+
+def collect_face_clips(directory: Path) -> list[Path]:
+    directory = Path(directory)
+    if not directory.is_dir():
+        raise FileNotFoundError(directory)
+    return sorted(
+        (p for p in directory.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS),
+        key=_sort_key,
+    )
+
+
+def _stem_number(path: Path) -> int | None:
+    m = re.match(r"^(\d+)", path.stem.strip())
+    return int(m.group(1)) if m else None
+
+
+def parse_faces_subset(spec: str, available: list[Path]) -> list[Path]:
+    wanted: set[int] = set()
+    for token in spec.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if "-" in token:
+            lo, hi = token.split("-", 1)
+            wanted.update(range(int(lo), int(hi) + 1))
+        else:
+            wanted.add(int(token))
+    return [p for p in available if (_stem_number(p) in wanted)]
+
+
+def assign_faces(n: int, faces: list[Path], seed: int) -> list[Path]:
+    if not faces:
+        raise ValueError("No face clips available for assignment")
+    rng = random.Random(seed)
+    shuffled = faces[:]
+    rng.shuffle(shuffled)
+    return [shuffled[i % len(shuffled)] for i in range(n)]
