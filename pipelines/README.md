@@ -13,8 +13,10 @@
 | **Много рилсов** *(Reel Matrix — в разработке)* | `reel_matrix.py` | Из сменных блоков (вступления × серединки × концовки) собирает все сочетания — множество уникальных рилсов. |
 | **Динамичный рилс** *(3-strip)* | `three_strip/build_3strip.zsh` | Три горизонтальных клипа, сложенных в 9:16, асинхронный каскад. Управляется конфигом. |
 | **shnurok** *(рекламный рилс кроссовок)* | `src/cli.py` (`python -m src.cli shnurok`) | Хук (говорящая голова + титры-лесенка + влёт графики) → тело (b-roll под готовую озвучку + пословные сабы) → CTA. Стили classic/bold. Плейбук: `shnurok/README.md`. |
+| **Мем машина** *(пересборка мемов)* | `src/cli.py` (`python -m src.cli meme`) + `render_meme_machine.py` | Пересаживает лицо-реакцию пользователя в сцену-сетап скачанного мема (дроп исходника в стыке лицо→панч); панч остаётся как есть или получает свою подпись. N дедуп-вариантов в `output/meme_publish/<series>/`. |
 | **QA (ref-style)** | `qa_ref_style.py` | Проверяет готовое видео: спецификацию, мёртвый эфир, размытие HDR, подписи, громкость. |
 | **QA (shnurok)** | `qa_shnurok.py` | Проверяет готовое видео: пословные сабы без наложения, формат, аудио-дедуп. |
+| **QA (meme)** | `qa_meme.py` | Проверяет готовые варианты: формат, дроп в стыке лицо→панч, читаемость подписей, дедуп-дистанция. |
 
 Каждая точка входа на Python поддерживает `--help`. Смотрите `../docs/modes.md`
 о том, как стадии связываются друг с другом, и `../CLAUDE.md` о том, когда какой
@@ -45,4 +47,8 @@ python pipelines/qa_ref_style.py --final output/<slug>/final.mp4
 # shnurok (закиньте исходники одного ролика в одну папку, см. shnurok/README.md)
 python -m src.cli shnurok assets/shnurok_test --style both
 python pipelines/qa_shnurok.py --slug shnurok_test
+
+# Мем машина (агент размечает plan.json по кадрам мема перед запуском)
+python -m src.cli meme <мем> --faces <пул> --pairs pairs.yaml --series <имя>
+python pipelines/qa_meme.py --series <имя>
 ```

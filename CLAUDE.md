@@ -55,10 +55,22 @@ request to a route by the **"User says (RU)"** trigger phrases.
 | 4 | **Много рилсов** (Reel Matrix) — *WIP* | Shoot interchangeable hook/tip/cta blocks and mix them into many unique videos (combinatorial, on top of #2+#3). | «сделай серию рилсов из файлов», «собери серию рилсов», «нужно много вариантов», «перемешай вступления и концовки» | `python pipelines/reel_matrix.py` |
 | 5 | **Динамичный рилс** (3-strip) | Three horizontal clips stacked in one 9:16 frame, asynchronous cascade. Config-driven; great for "a day of footage". | «собери динамичный рилс», «три клипа в одном кадре из сегодняшних видео» | `zsh pipelines/three_strip/build_3strip.zsh episodes/<name>.conf` |
 | 6 | **shnurok** (рекламный рилс кроссовок) | Хук (говорящая голова + титры-лесенка + влёт графики + текст за головой (опц.)) → тело (b-roll под готовую озвучку + пословные сабы) → CTA. Стили classic/bold. | «собери shnurok», «рекламный рилс кроссовок», «в стиле NUMERIS» | `python -m src.cli shnurok <folder> --style both` |
-| — | **QA** | Gate a finished video (format, dead air, HDR wash, captions, loudness, duplicate takes). Not a route — a check. | — | `python pipelines/qa_talking_head.py --slug <slug>` (talking-head: per-clip cut timing + duplicate-phrase check) · `python pipelines/qa_ref_style.py` (ref-style) · `three_strip/qa.py` (3-strip) · `python pipelines/qa_shnurok.py --slug <slug>` (shnurok: word-sub overlap, format, audio-dedup) |
+| 7 | **Мем машина** (пересборка мемов) | Скачанный мем: сцена-лицо меняется на твой клип-реакцию + свои подписи, дроп исходника в стыке; N дедуп-вариантов + описания на площадки. | «собери мем», «пересобери этот мем», «сделай N мемов с моим лицом» | `python -m src.cli meme <мем> --faces <пул> --pairs pairs.yaml --series <имя>` |
+| — | **QA** | Gate a finished video (format, dead air, HDR wash, captions, loudness, duplicate takes). Not a route — a check. | — | `python pipelines/qa_talking_head.py --slug <slug>` (talking-head: per-clip cut timing + duplicate-phrase check) · `python pipelines/qa_ref_style.py` (ref-style) · `three_strip/qa.py` (3-strip) · `python pipelines/qa_shnurok.py --slug <slug>` (shnurok: word-sub overlap, format, audio-dedup) · `python pipelines/qa_meme.py --series <имя>` (meme machine: format, seam-drop timing, caption legibility, dedup distance) |
 
 Routes **#3 (Демо продукта)** and **#4 (Много рилсов)** are *work-in-progress* —
 usable but not yet stable; tell the user so if they pick one.
+
+**Route #7 (Мем машина) — mechanics:** a meme = 2 beats (setup + punch). The
+**setup** scene is replaced by the user's face-reaction clip and gets a new
+caption; the source's audio drop lands exactly at the seam between the face
+clip and the punch scene. The **punch** scene either keeps the source as-is
+(mode `keep`) or gets a new overlay caption (mode `overlay`, optional `cover`
+box to blank out a competing burned-in caption first). The face pool comes
+from `MEME_FACES_DIR`; the agent marks up the meme-plan JSON (`drop_at` +
+`beats`) by looking at frames — there's no auto-detect yet. Produces N deduped
+variants published to `output/meme_publish/<series>/`; work versions live
+under `output/meme/<slug>/vN/`.
 
 **Feeding route #2 (Говорящая голова) — clip ingestion rules:**
 - A day's footage is usually **several clips** (the person stops/restarts the
