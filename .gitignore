@@ -86,3 +86,8 @@ pipelines/qa_dedup.py
 pipelines/qa_seams.py
 pipelines/hook_demo_batch.py
 pipelines/hook_demo_cta.py
+
+.upload_tmp/
+
+# Local media dumps (raw footage — never commit)
+assets/shnurok_clean_2026-08-10/
