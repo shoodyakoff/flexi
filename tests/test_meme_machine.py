@@ -112,3 +112,69 @@ def test_punch_scene_seeks_to_drop_and_keeps_audio(tmp_path: Path) -> None:
     assert "[0:a]" in joined                            # звук панча из исходника
     assert "scale=1080:1920:force_original_aspect_ratio=increase" in joined
     assert "hflip" not in joined
+
+
+from src.meme_video import Box
+from src.meme_machine import (
+    VariantLook, MemeCaptionCfg, variant_look, build_caption_overlay_command,
+)
+
+
+def _cfg(tmp_path: Path) -> MemeCaptionCfg:
+    return MemeCaptionCfg(
+        font_regular=tmp_path / "reg.ttf",
+        font_bold=tmp_path / "bold.ttf",
+        palette=["white", "#FFD400", "#00E0FF"],
+        bold_cycle=[True, False],
+        top_box=Box(x=40, y=120, w=1000, h=360),
+        bottom_box=Box(x=40, y=1440, w=1000, h=360),
+        font_size=72,
+        max_chars_per_line=20,
+    )
+
+
+def test_variant_look_cycles_color_and_weight(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    assert variant_look(0, cfg) == VariantLook(color="white", font_file=tmp_path / "bold.ttf")
+    assert variant_look(1, cfg) == VariantLook(color="#FFD400", font_file=tmp_path / "reg.ttf")
+    assert variant_look(3, cfg).color == "white"        # 3 % 3 == 0
+    assert variant_look(3, cfg).font_file == (tmp_path / "reg.ttf")  # 3 % 2 == 1 -> regular
+
+
+def test_overlay_draws_caption_a_and_skips_kept_punch(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    plan = MemePlan(source=Path("s.mp4"), drop_at=3.4, beats=[
+        Beat("setup", "face", "top", "own"),
+        Beat("punch", "source", "top", "keep"),
+    ])
+    cmd = build_caption_overlay_command(
+        input_path=tmp_path / "in.mp4", output_path=tmp_path / "out.mp4",
+        total_dur=6.0, scene_a_len=3.4, plan=plan,
+        pair=CaptionPair(a="сетап", b=None),
+        look=VariantLook(color="white", font_file=tmp_path / "bold.ttf"), cfg=cfg,
+    )
+    joined = " ".join(cmd)
+    assert "drawtext=" in joined
+    assert "fontcolor=white" in joined
+    assert "enable='between(t,0.000,3.400)'" in joined  # подпись A на сцене A
+    assert joined.count("drawtext=") == 1               # панч keep -> подпись B не рисуется
+    assert "hflip" not in joined
+
+
+def test_overlay_draws_caption_b_with_cover_when_overlay_mode(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    plan = MemePlan(source=Path("s.mp4"), drop_at=3.4, beats=[
+        Beat("setup", "face", "top", "own"),
+        Beat("punch", "source", "top", "overlay", cover=Box(x=0, y=1400, w=1080, h=300)),
+    ])
+    cmd = build_caption_overlay_command(
+        input_path=tmp_path / "in.mp4", output_path=tmp_path / "out.mp4",
+        total_dur=6.0, scene_a_len=3.4, plan=plan,
+        pair=CaptionPair(a="сетап", b="панч"),
+        look=VariantLook(color="#FFD400", font_file=tmp_path / "bold.ttf"), cfg=cfg,
+    )
+    joined = " ".join(cmd)
+    assert joined.count("drawtext=") == 2               # A + B
+    assert "drawbox=x=0:y=1400:w=1080:h=300" in joined  # плашка-крышка под B
+    assert "enable='between(t,3.400,6.000)'" in joined  # подпись B на сцене B
+    assert "fontcolor=#FFD400" in joined

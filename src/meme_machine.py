@@ -11,6 +11,7 @@ import yaml
 
 from src.meme_video import Box, W, H, FPS, VIDEO_EXTENSIONS, _sort_key  # переиспользуем константы/типы
 from src.meme_video import _video_normalize_filter
+from src.meme_video import _filter_path, text_for_overlay
 
 
 @dataclass(frozen=True)
@@ -148,4 +149,82 @@ def build_punch_scene_command(
         "-filter_complex", filter_complex,
         "-map", "[v]", "-map", "[a]",
         *_ENC, str(output_path),
+    ]
+
+
+@dataclass(frozen=True)
+class VariantLook:
+    color: str
+    font_file: Path
+
+
+@dataclass(frozen=True)
+class MemeCaptionCfg:
+    font_regular: Path
+    font_bold: Path
+    palette: list[str]
+    bold_cycle: list[bool]
+    top_box: Box
+    bottom_box: Box
+    font_size: int = 72
+    max_chars_per_line: int = 20
+
+
+def variant_look(index: int, cfg: MemeCaptionCfg) -> VariantLook:
+    color = cfg.palette[index % len(cfg.palette)]
+    bold = cfg.bold_cycle[index % len(cfg.bold_cycle)]
+    return VariantLook(color=color, font_file=(cfg.font_bold if bold else cfg.font_regular))
+
+
+def _box_for(pos: str, cfg: MemeCaptionCfg) -> Box:
+    return cfg.top_box if pos == "top" else cfg.bottom_box
+
+
+def _drawtext(*, text: str, look: VariantLook, box: Box, cfg: MemeCaptionCfg, enable: str) -> str:
+    lines = text_for_overlay(text, max_chars_per_line=cfg.max_chars_per_line)
+    tmp = box  # текст вписан по центру бокса
+    return (
+        "drawtext="
+        f"fontfile={_filter_path(look.font_file)}:"
+        f"text='{lines.replace(chr(39), chr(92) + chr(39))}':"
+        f"fontcolor={look.color}:"
+        f"fontsize={cfg.font_size}:line_spacing=8:"
+        "borderw=6:bordercolor=black@0.85:shadowx=2:shadowy=2:shadowcolor=black@0.5:"
+        "text_align=C:"
+        f"x=(w-text_w)/2:y={tmp.y}+({tmp.h}-text_h)/2:"
+        f"enable='{enable}'"
+    )
+
+
+def build_caption_overlay_command(*, input_path, output_path, total_dur, scene_a_len,
+                                  plan, pair, look, cfg):
+    a_end = f"{scene_a_len:.3f}"
+    total = f"{total_dur:.3f}"
+    setup_beat, punch_beat = plan.beats[0], plan.beats[1]
+    filters: list[str] = []
+
+    # подпись A на сцене A
+    filters.append(_drawtext(
+        text=pair.a, look=look, box=_box_for(setup_beat.caption_pos, cfg), cfg=cfg,
+        enable=f"between(t,0.000,{a_end})",
+    ))
+
+    # подпись B на сцене B (только режим overlay + текст задан)
+    if punch_beat.caption_mode == "overlay" and pair.b:
+        enable_b = f"between(t,{a_end},{total})"
+        if punch_beat.cover is not None:
+            filters.append(punch_beat.cover.drawbox_filter("black", enable=enable_b))
+        filters.append(_drawtext(
+            text=pair.b, look=look, box=_box_for(punch_beat.caption_pos, cfg), cfg=cfg,
+            enable=enable_b,
+        ))
+
+    filters += ["setpts=PTS-STARTPTS", "format=yuv420p"]
+    vf = ",".join(filters)
+    return [
+        "ffmpeg", "-nostdin", "-y", "-i", str(input_path),
+        "-vf", vf, "-map", "0:v:0", "-map", "0:a?",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-bf", "0",
+        "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart",
+        str(output_path),
     ]
