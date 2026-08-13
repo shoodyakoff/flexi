@@ -165,7 +165,7 @@ def test_overlay_draws_caption_a_and_skips_kept_punch(tmp_path: Path) -> None:
     assert "textfile=" in joined
     assert "text='" not in joined                       # нет инлайн-текста
     assert "\n" not in joined                           # сырой перевод строки не течёт в argv
-    cap_a = tmp_path / "cap_a.txt"
+    cap_a = tmp_path / "cap_a_0.txt"                     # одна строка -> один per-line файл
     assert cap_a.exists()
     assert cap_a.read_text(encoding="utf-8") == text_for_overlay(
         pair.a, max_chars_per_line=cfg.max_chars_per_line
@@ -195,8 +195,8 @@ def test_overlay_draws_caption_b_with_cover_when_overlay_mode(tmp_path: Path) ->
     assert "textfile=" in joined
     assert "text='" not in joined                       # нет инлайн-текста
     assert "\n" not in joined                           # сырой перевод строки не течёт в argv
-    cap_a = tmp_path / "cap_a.txt"
-    cap_b = tmp_path / "cap_b.txt"
+    cap_a = tmp_path / "cap_a_0.txt"                     # одна строка -> один per-line файл
+    cap_b = tmp_path / "cap_b_0.txt"
     assert cap_a.exists() and cap_b.exists()
     assert cap_a.read_text(encoding="utf-8") == text_for_overlay(
         pair.a, max_chars_per_line=cfg.max_chars_per_line
@@ -204,6 +204,39 @@ def test_overlay_draws_caption_b_with_cover_when_overlay_mode(tmp_path: Path) ->
     assert cap_b.read_text(encoding="utf-8") == text_for_overlay(
         pair.b, max_chars_per_line=cfg.max_chars_per_line
     )
+
+
+def test_overlay_multiline_caption_splits_into_per_line_drawtexts(tmp_path: Path) -> None:
+    # Регрессия на .notdef-баг: этот билд ffmpeg рисует сырой перевод строки (LF)
+    # внутри одного drawtext как квадрат «нет глифа». Лечим тем, что каждая
+    # обёрнутая строка становится отдельным одностроковым drawtext — ни в argv,
+    # ни в textfile нет ни одного \n.
+    cfg = _cfg(tmp_path)
+    long_caption = "спросил тимлида про мой пиар реквест"
+    wrapped = text_for_overlay(long_caption, max_chars_per_line=cfg.max_chars_per_line)
+    assert wrapped.count("\n") == 1                      # выбранная строка рвётся ровно на 2
+    plan = MemePlan(source=Path("s.mp4"), drop_at=3.4, beats=[
+        Beat("setup", "face", "top", "own"),
+        Beat("punch", "source", "top", "keep"),          # панч keep -> только подпись A
+    ])
+    pair = CaptionPair(a=long_caption, b=None)
+    cmd = build_caption_overlay_command(
+        input_path=tmp_path / "in.mp4", output_path=tmp_path / "out.mp4",
+        total_dur=6.0, scene_a_len=3.4, plan=plan,
+        pair=pair,
+        look=VariantLook(color="white", font_file=tmp_path / "bold.ttf"), cfg=cfg,
+        work_dir=tmp_path,
+    )
+    joined = " ".join(cmd)
+    assert joined.count("drawtext=") == 2                # 2 строки -> 2 отдельных drawtext
+    assert "\n" not in joined                            # сырой перевод строки не течёт в argv
+    cap_0 = tmp_path / "cap_a_0.txt"
+    cap_1 = tmp_path / "cap_a_1.txt"
+    assert cap_0.exists() and cap_1.exists()
+    assert cap_0.read_text(encoding="utf-8") == wrapped.split("\n")[0]
+    assert cap_1.read_text(encoding="utf-8") == wrapped.split("\n")[1]
+    assert "\n" not in cap_0.read_text(encoding="utf-8")  # каждый файл одностроковый
+    assert "\n" not in cap_1.read_text(encoding="utf-8")
 
 
 from src.meme_machine import plan_variants, MemeVariant

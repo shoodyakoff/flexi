@@ -188,25 +188,38 @@ def _box_for(pos: str, cfg: MemeCaptionCfg) -> Box:
     return cfg.top_box if pos == "top" else cfg.bottom_box
 
 
-def _drawtext(
-    *, text: str, look: VariantLook, box: Box, cfg: MemeCaptionCfg, enable: str, text_file: Path
-) -> str:
-    lines = text_for_overlay(text, max_chars_per_line=cfg.max_chars_per_line)
-    # Читаем многострочный текст из файла (textfile=), а не инлайном (text=): сырой
-    # перевод строки внутри text='...' этот билд ffmpeg рисует как .notdef-глиф —
-    # квадрат «нет глифа» на каждом переносе. Проверенный паттерн из meme_video.
-    Path(text_file).write_text(lines, encoding="utf-8")
-    return (
-        "drawtext="
-        f"fontfile={_filter_path(look.font_file)}:"
-        f"textfile={_filter_path(text_file)}:"
-        f"fontcolor={look.color}:"
-        f"fontsize={cfg.font_size}:line_spacing=8:"
-        "borderw=6:bordercolor=black@0.85:shadowx=2:shadowy=2:shadowcolor=black@0.5:"
-        "text_align=C:"
-        f"x=(w-text_w)/2:y={box.y}+({box.h}-text_h)/2:"
-        f"enable='{enable}'"
-    )
+_CAPTION_LINE_SPACING = 8
+
+
+def _caption_drawtexts(
+    *, text: str, look: VariantLook, box: Box, cfg: MemeCaptionCfg,
+    enable: str, work_dir: Path, tag: str,
+) -> list[str]:
+    # Каждая обёрнутая строка рисуется СВОИМ одностроковым drawtext на своей y —
+    # ни в textfile, ни в argv нет ни одного \n. Причина: этот билд ffmpeg рисует
+    # сырой перевод строки (LF) внутри одного drawtext как .notdef-глиф (квадрат
+    # «нет глифа») на месте переноса — и инлайном (text=), и из файла (textfile=).
+    # Лечится только разбиением на отдельные одностроковые drawtext.
+    lines = text_for_overlay(text, max_chars_per_line=cfg.max_chars_per_line).split("\n")
+    n = len(lines)
+    block_h = n * cfg.font_size + (n - 1) * _CAPTION_LINE_SPACING
+    y_top = box.y + (box.h - block_h) // 2               # блок центрируется по вертикали в box
+    filters: list[str] = []
+    for i, line in enumerate(lines):
+        text_file = Path(work_dir) / f"cap_{tag}_{i}.txt"
+        text_file.write_text(line, encoding="utf-8")     # одностроковый файл, без \n
+        y = y_top + i * (cfg.font_size + _CAPTION_LINE_SPACING)
+        filters.append(
+            "drawtext="
+            f"fontfile={_filter_path(look.font_file)}:"
+            f"textfile={_filter_path(text_file)}:"
+            f"fontcolor={look.color}:"
+            f"fontsize={cfg.font_size}:"
+            "borderw=6:bordercolor=black@0.85:shadowx=2:shadowy=2:shadowcolor=black@0.5:"
+            f"x=(w-text_w)/2:y={y}:"
+            f"enable='{enable}'"
+        )
+    return filters
 
 
 def build_caption_overlay_command(*, input_path, output_path, total_dur, scene_a_len,
@@ -218,9 +231,9 @@ def build_caption_overlay_command(*, input_path, output_path, total_dur, scene_a
     filters: list[str] = []
 
     # подпись A на сцене A
-    filters.append(_drawtext(
+    filters.extend(_caption_drawtexts(
         text=pair.a, look=look, box=_box_for(setup_beat.caption_pos, cfg), cfg=cfg,
-        enable=f"between(t,0.000,{a_end})", text_file=work_dir / "cap_a.txt",
+        enable=f"between(t,0.000,{a_end})", work_dir=work_dir, tag="a",
     ))
 
     # подпись B на сцене B (только режим overlay + текст задан)
@@ -228,9 +241,9 @@ def build_caption_overlay_command(*, input_path, output_path, total_dur, scene_a
         enable_b = f"between(t,{a_end},{total})"
         if punch_beat.cover is not None:
             filters.append(punch_beat.cover.drawbox_filter("black", enable=enable_b))
-        filters.append(_drawtext(
+        filters.extend(_caption_drawtexts(
             text=pair.b, look=look, box=_box_for(punch_beat.caption_pos, cfg), cfg=cfg,
-            enable=enable_b, text_file=work_dir / "cap_b.txt",
+            enable=enable_b, work_dir=work_dir, tag="b",
         ))
 
     filters += ["setpts=PTS-STARTPTS", "format=yuv420p"]
