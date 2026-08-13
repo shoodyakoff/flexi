@@ -31,17 +31,24 @@ def check_seam(total_dur: float, scene_a_len: float, drop_at: float, tol: float 
 
 def _probe(path: Path) -> tuple[int, int, float, bool]:
     def q(stream: str, entries: str) -> str:
+        # default=nokey=1 не дописывает хвостовое side_data-поле к строке потока,
+        # в отличие от csv=p=0 (HDR "Ambient viewing environment" даёт "30/1," →
+        # float("1,") падает). Возвращает чистые значения по одному в строке.
         return subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", stream,
-             "-show_entries", entries, "-of", "csv=p=0", str(path)],
+             "-show_entries", entries, "-of", "default=nokey=1:noprint_wrappers=1", str(path)],
             capture_output=True, text=True,
         ).stdout.strip()
-    wh = q("v:0", "stream=width,height").splitlines()[0].split(",")
-    rate = q("v:0", "stream=r_frame_rate") or "0/1"
+
+    wh = q("v:0", "stream=width,height").splitlines()
+    width = int(wh[0]) if wh and wh[0] else 0
+    height = int(wh[1]) if len(wh) > 1 and wh[1] else 0
+    rate_lines = q("v:0", "stream=r_frame_rate").splitlines()
+    rate = rate_lines[0] if rate_lines else "0/1"
     num, den = (rate.split("/") + ["1"])[:2]
-    fps = (float(num) / float(den)) if float(den) else 0.0
-    has_audio = bool(q("a:0", "stream=index"))
-    return int(wh[0]), int(wh[1]), round(fps, 2), has_audio
+    fps = (float(num) / float(den)) if den and float(den) else 0.0
+    has_audio = bool(q("a:0", "stream=index").strip())
+    return width, height, round(fps, 2), has_audio
 
 
 def main() -> None:
