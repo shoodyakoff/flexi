@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import random
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +14,11 @@ import yaml
 from src.meme_video import Box, W, H, FPS, VIDEO_EXTENSIONS, _sort_key  # переиспользуем константы/типы
 from src.meme_video import _video_normalize_filter
 from src.meme_video import _filter_path, text_for_overlay
+from src.meme_video import (
+    build_concat_command, build_dedup_command, build_qa_sheet_command,
+    write_concat_list, run_command, punch_filename_stem,
+)
+from src.output_paths import versioned_dir
 
 
 @dataclass(frozen=True)
@@ -228,3 +235,79 @@ def build_caption_overlay_command(*, input_path, output_path, total_dur, scene_a
         "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart",
         str(output_path),
     ]
+
+
+@dataclass(frozen=True)
+class MemeVariant:
+    index: int
+    pair: CaptionPair
+    face_path: Path
+    final_path: Path
+
+
+def probe_duration(path: Path) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True,
+    )
+    try:
+        return float(out.stdout.strip())
+    except ValueError:
+        return 0.0
+
+
+def plan_variants(*, pairs, faces, seed, publish_dir):
+    assigned = assign_faces(len(pairs), faces, seed)
+    variants: list[MemeVariant] = []
+    for i, (pair, face) in enumerate(zip(pairs, assigned), start=1):
+        stem = punch_filename_stem(pair.a, max_words=5)
+        variants.append(MemeVariant(
+            index=i, pair=pair, face_path=face,
+            final_path=publish_dir / f"{i:02d}_{stem}.mp4",
+        ))
+    return variants
+
+
+def build_variant(*, variant, plan, look, cfg, work_dir):
+    job = work_dir / f"{variant.index:02d}_{punch_filename_stem(variant.pair.a, max_words=5)}"
+    job.mkdir(parents=True, exist_ok=True)
+    scene_a, scene_b = job / "sceneA.mp4", job / "sceneB.mp4"
+    concat_list, assembled = job / "concat.txt", job / "assembled.mp4"
+    dedup, final, qa = job / "dedup.mp4", job / "final.mp4", job / "qa_sheet.jpg"
+
+    face_len = probe_duration(variant.face_path)
+    a_len = scene_a_length(face_len, plan.drop_at)
+    a_start = audio_start(face_len, plan.drop_at)
+
+    run_command(build_face_scene_command(
+        face_path=variant.face_path, source_path=plan.source, output_path=scene_a,
+        scene_a_len=a_len, audio_start=a_start,
+    ))
+    run_command(build_punch_scene_command(
+        source_path=plan.source, output_path=scene_b, drop_at=plan.drop_at,
+    ))
+    write_concat_list([scene_a, scene_b], concat_list)
+    run_command(build_concat_command(concat_list, assembled))
+    run_command(build_dedup_command(assembled, dedup))
+
+    total = probe_duration(dedup)
+    run_command(build_caption_overlay_command(
+        input_path=dedup, output_path=final, total_dur=total, scene_a_len=a_len,
+        plan=plan, pair=variant.pair, look=look, cfg=cfg,
+    ))
+    run_command(build_qa_sheet_command(final, qa))
+    variant.final_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(final, variant.final_path)
+    return final
+
+
+def run_batch(*, plan, pairs, faces, series, seed, cfg, work_root, publish_root):
+    publish_dir = Path(publish_root) / series
+    work_dir = versioned_dir(Path(work_root) / series)
+    variants = plan_variants(pairs=pairs, faces=faces, seed=seed, publish_dir=publish_dir)
+    finals: list[Path] = []
+    for v in variants:
+        look = variant_look(v.index - 1, cfg)
+        finals.append(build_variant(variant=v, plan=plan, look=look, cfg=cfg, work_dir=work_dir))
+    return finals

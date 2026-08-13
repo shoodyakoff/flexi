@@ -178,3 +178,25 @@ def test_overlay_draws_caption_b_with_cover_when_overlay_mode(tmp_path: Path) ->
     assert "drawbox=x=0:y=1400:w=1080:h=300" in joined  # плашка-крышка под B
     assert "enable='between(t,3.400,6.000)'" in joined  # подпись B на сцене B
     assert "fontcolor=#FFD400" in joined
+
+
+from src.meme_machine import plan_variants, MemeVariant
+
+
+def test_plan_variants_names_and_assigns_faces(tmp_path: Path) -> None:
+    faces = [tmp_path / f"{i}.mp4" for i in range(1, 3)]  # 2 лица
+    for f in faces:
+        f.write_text("x")
+    pairs = [
+        CaptionPair(a="Дал Claude задачу собрать субагентов", b="что получаю"),
+        CaptionPair(a="Второй сетап про лимиты", b=None),
+        CaptionPair(a="Третий сетап", b=None),
+    ]
+    variants = plan_variants(pairs=pairs, faces=faces, seed=7, publish_dir=tmp_path / "pub")
+    assert [v.index for v in variants] == [1, 2, 3]
+    assert variants[0].final_path.name.startswith("01_")
+    assert variants[2].final_path.name.startswith("03_")
+    assert all(v.face_path in faces for v in variants)   # лица из пула
+    # повторяемость назначения
+    again = plan_variants(pairs=pairs, faces=faces, seed=7, publish_dir=tmp_path / "pub")
+    assert [v.face_path for v in variants] == [v.face_path for v in again]
